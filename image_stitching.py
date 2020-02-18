@@ -1,5 +1,5 @@
 # USAGE
-# python image_stitching.py --images images/scottsdale --output output.png --crop 1
+# python image_stitching.py --images midia/016-2017 --output output.png --crop -1
 # python image_stitching.py --images midia/016-2017 --output output.png --crop 1
 
 # import the necessary packages
@@ -44,9 +44,8 @@ if status == 0:
 	if args["crop"] > 0:
 		# create a 10 pixel border surrounding the stitched image
 		print("[INFO] cropping...")
-		#stitched = cv2.copyMakeBorder(stitched, 10, 10, 10, 10,
-		#	cv2.BORDER_CONSTANT, (0, 0, 0))
-		stitched = cv2.copyMakeBorder(stitched, 85, 85, 85, 85, cv2.BORDER_CONSTANT, (0, 0, 0))
+		stitched = cv2.copyMakeBorder(stitched, 10, 10, 10, 10,
+			cv2.BORDER_CONSTANT, (0, 0, 0))
 
 		# convert the stitched image to grayscale and threshold it
 		# such that all pixels greater than zero are set to 255
@@ -100,8 +99,8 @@ if status == 0:
 	cv2.imwrite(args["output"], stitched)
 
 	# display the output stitched image to our screen
-	cv2.imshow("Stitched", stitched)
-	cv2.waitKey(0)
+	#cv2.imshow("Stitched", stitched)
+	#cv2.waitKey(0)
 
 # otherwise the stitching failed, likely due to not enough keypoints)
 # being detected

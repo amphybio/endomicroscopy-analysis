@@ -46,10 +46,24 @@ def video_to_frame(source):
   file = os.path.basename(source)
   print('Finished ', file)
 
-#source ='/midia/016-2017.mp4'
-#video_to_frame(source)
+def video_to_frame_cropped(source):
+  vidcap = cv.VideoCapture(source)
+  success,image = vidcap.read()
+  count = 0
+  dir = os.path.splitext(source)[0]
+  os.mkdir(dir)
+  while success:
+    gray_frame = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+    crop_img = gray_frame[83:498, 83:498]
+    cv.imwrite(dir+"/frame%d.png" % count, crop_img)
+    success,image = vidcap.read()
+    count += 1
+  file = os.path.basename(source)
+  print('Finished ', file)
 
-source = './midia/016-2017/'
+source ='./midia/016-2017.mp4'
+#video_to_frame(source)
+video_to_frame_cropped(source)
 
 # Rascunho recortar mascara de borda
 #  #_,thresh = cv2.threshold(gray,1,255,cv2.THRESH_BINARY)
