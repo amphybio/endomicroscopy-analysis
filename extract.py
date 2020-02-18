@@ -19,7 +19,7 @@
 #     DESCRIÇÃO: Script to extract features of endomicroscopy images
 #
 #        OPÇÕES:  ---
-#    REQUISITOS:  OpenCV, Python
+#    REQUISITOS:  OpenCV, Python, Numpy
 #          BUGS:  ---
 #         NOTAS:  ---
 #         AUTOR:  Alan U. Sabino <alan.sabino@usp.br>
@@ -28,19 +28,23 @@
 #       REVISÃO:  ---
 #===============================================================================
 
+# USAGE
+# python extract.py --path midia/016-2017
+
 import cv2 as cv
 import numpy as np
+import argparse
 import os
 
 def video_to_frame(source):
   vidcap = cv.VideoCapture(source)
   success,image = vidcap.read()
   count = 0
-  dir = os.path.splitext(source)[0]
-  os.mkdir(dir)
+  path = os.path.splitext(source)[0]
+  os.mkpath(path)
   while success:
     gray_frame = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
-    cv.imwrite(dir+"/frame%d.png" % count, gray_frame)
+    cv.imwrite(path+"/frame%03d.png" % count, gray_frame)
     success,image = vidcap.read()
     count += 1
   file = os.path.basename(source)
@@ -50,20 +54,44 @@ def video_to_frame_cropped(source):
   vidcap = cv.VideoCapture(source)
   success,image = vidcap.read()
   count = 0
-  dir = os.path.splitext(source)[0]
-  os.mkdir(dir)
+  path = os.path.splitext(source)[0]
+  os.mkdir(path)
   while success:
     gray_frame = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
     crop_img = gray_frame[83:498, 83:498]
-    cv.imwrite(dir+"/frame%d.png" % count, crop_img)
+    cv.imwrite(path+"/frame%03d.png" % count, crop_img)
     success,image = vidcap.read()
     count += 1
   file = os.path.basename(source)
   print('Finished ', file)
 
-source ='./midia/016-2017.mp4'
+def stich_stack(source):
+  list_images = sorted(os.listdir(source))
+  images = []
+  for image_name in list_images:
+    image = cv.imread(source+'/'+image_name)
+    images.append(image)
+
+  stitcher = cv.Stitcher.create(cv.Stitcher_SCANS)
+  status, pano = stitcher.stitch(images)
+
+  if status != cv.Stitcher_OK:
+    print("Can't stitch images, error code = %d" % status)
+    sys.exit(-1)
+
+  cv.imwrite("teste.png", pano)
+  print("stitching completed successfully.")
+
+ap = argparse.ArgumentParser()
+ap.add_argument("-p", "--path", type=str, required=True,
+	help="path to input directory of images")
+args = vars(ap.parse_args())
+
+source = args["path"]
+
 #video_to_frame(source)
-video_to_frame_cropped(source)
+#video_to_frame_cropped(source)
+stich_stack(source)
 
 # Rascunho recortar mascara de borda
 #  #_,thresh = cv2.threshold(gray,1,255,cv2.THRESH_BINARY)
