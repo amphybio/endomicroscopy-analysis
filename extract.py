@@ -29,8 +29,10 @@
 # =============================================================================
 
 # USAGE
-# python extract.py --path midia/016-2017
-# python extract.py --path midia/tres
+# python extract.py -f video_frame -p midia/016-2017.mp4
+# python extract.py -f video_frame_crop -p midia/016-2017.mp4
+# python extract.py -f stitch -p midia/016-2017
+# python extract.py -f stitch -p midia/tres
 
 import cv2 as cv
 import numpy as np
@@ -40,20 +42,20 @@ import sys
 import shutil
 
 
-def video_frame(source, crop=False, frames=-1):
+def video_frame(source, crop=False):
     vidcap = cv.VideoCapture(source)
     success, image = vidcap.read()
     count = 0
     path = os.path.splitext(source)[0]
     is_dir(path)
     os.mkdir(path)
-    while success and count != frames:
+    while success:
         gray_frame = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
         image = remove_text(gray_frame)
         if (crop is True):
             image = image[75:500, 75:500]
         cv.imwrite(path+"/frame%03d.png" % count, image)
-        success, img = vidcap.read()
+        success, image = vidcap.read()
         count += 1
     file = os.path.basename(source)
     print('Finished ', file)
@@ -78,7 +80,7 @@ def remove_text(image):
     return image
 
 
-def stich_stack(source):
+def stitch_stack(source):
     list_images = sorted(os.listdir(source))
     images = []
     for image_name in list_images:
@@ -93,7 +95,7 @@ def stich_stack(source):
     print("stitching completed successfully.")
 
 
-def stich_stack_loop(source):
+def stitch_stack_loop(source):
     list_images = sorted(os.listdir(source))
     images = []
     for image_name in list_images:
@@ -115,7 +117,7 @@ def stich_stack_loop(source):
     print(image)
 
 
-def stich_loop(source):
+def stitch_loop(source):
     list_images = sorted(os.listdir(source))
     images = []
     for image_name in list_images:
@@ -137,6 +139,7 @@ def stich_loop(source):
 
 
 def stitch(images, ratio=0.75, reproj_thresh=4.0):
+    print(images)
     (imageB, imageA) = images
     (kpsA, featuresA) = detectAndDescribe(imageA)
     (kpsB, featuresB) = detectAndDescribe(imageB)
@@ -172,12 +175,18 @@ def matchKeypoints(kpsA, kpsB, featuresA, featuresB, ratio, reprojThresh):
 
 
 ap = argparse.ArgumentParser()
-ap.add_argument("-p", "--path", type=str, required=True, help="path to input directory of images")
+ap.add_argument("-f", "--function", type=str, required=True, help="Set a function to call (video_frame; video_frame_crop)")
+ap.add_argument("-p", "--path", type=str, required=False, help="Input file or directory of images path")
 args = vars(ap.parse_args())
 
+function = args["function"]
 source = args["path"]
 
-video_frame(source)
-# stich_stack(source)
-# stich_loop(source) # Esse não funciona
-# stich_stack_loop(source)
+if (function == "video_frame"):
+    video_frame(source)
+elif (function == "video_frame_crop"):
+    video_frame(source, True)
+elif (function == "stitch"):
+    stitch_loop(source)
+else:
+    print("Undefined function")
