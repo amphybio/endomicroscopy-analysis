@@ -139,11 +139,10 @@ def stitch_loop(source):
 
 
 def stitch(images, ratio=0.75, reproj_thresh=4.0):
-    print(images)
     (imageB, imageA) = images
     (kpsA, featuresA) = detectAndDescribe(imageA)
     (kpsB, featuresB) = detectAndDescribe(imageB)
-    M = matchKeypoints(kpsA, kpsB, featuresA, featuresB, ratio, reprojThresh)
+    M = matchKeypoints(kpsA, kpsB, featuresA, featuresB, ratio, reproj_thresh)
     if M is None:
         return None
     (matches, H, status) = M
@@ -187,6 +186,6 @@ if (function == "video_frame"):
 elif (function == "video_frame_crop"):
     video_frame(source, True)
 elif (function == "stitch"):
-    stitch_loop(source)
+    stitch_stack(source)
 else:
     print("Undefined function")
