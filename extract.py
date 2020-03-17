@@ -37,37 +37,45 @@ import numpy as np
 import argparse
 import os
 import sys
+import shutil
 
 
-def video_to_frame(source):
+def video_frame(source, crop=False, frames=-1):
     vidcap = cv.VideoCapture(source)
     success, image = vidcap.read()
     count = 0
     path = os.path.splitext(source)[0]
+    is_dir(path)
     os.mkdir(path)
-    while success:
+    while success and count != frames:
         gray_frame = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
-        cv.imwrite(path+"/frame%03d.png" % count, gray_frame)
-        success, image = vidcap.read()
+        image = remove_text(gray_frame)
+        if (crop is True):
+            image = image[75:500, 75:500]
+        cv.imwrite(path+"/frame%03d.png" % count, image)
+        success, img = vidcap.read()
         count += 1
     file = os.path.basename(source)
     print('Finished ', file)
 
 
-def video_to_frame_cropped(source):
-    vidcap = cv.VideoCapture(source)
-    success, image = vidcap.read()
-    count = 0
-    path = os.path.splitext(source)[0]
-    os.mkdir(path)
-    while success:
-        gray_frame = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
-        crop_img = gray_frame[75:500, 75:500]
-        cv.imwrite(path+"/frame%03d.png" % count, crop_img)
-        success, image = vidcap.read()
-        count += 1
-    file = os.path.basename(source)
-    print('Finished ', file)
+def is_dir(source):
+    isdir = os.path.isdir(source)
+    if (isdir):
+        option = input("Path "+source+" already exists! Want to Overwrite or save Backup? (o/b)\n")
+        if (option == "b"):
+            is_dir(source+".BKP")
+            os.rename(source, source+'.BKP')
+            print("Backup complete! Backup path: ", source+'.BKP')
+        else:
+            shutil.rmtree(source)
+            print("Directory overwrited!")
+
+
+def remove_text(image):
+    cv.rectangle(image, (0, 0), (80, 30), (0, 0, 0), -1)
+    cv.rectangle(image, (496, 504), (576, 584), (0, 0, 0), -1)
+    return image
 
 
 def stich_stack(source):
@@ -169,8 +177,7 @@ args = vars(ap.parse_args())
 
 source = args["path"]
 
-video_to_frame(source)
-# video_to_frame_cropped(source)
+video_frame(source)
 # stich_stack(source)
 # stich_loop(source) # Esse não funciona
 # stich_stack_loop(source)
