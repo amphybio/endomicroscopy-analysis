@@ -14,18 +14,22 @@
 #   along with program.  If not, see <http://www.gnu.org/licenses/>.
 
 # =============================================================================
-#       ARQUIVO:  extract.py
+#          FILE:  extract.py
 #
-#     DESCRIÇÃO: Script to extract features of endomicroscopy images
+#   DESCRIPTION: Script to extract features of endomicroscopy images
 #
-#        OPÇÕES:  ---
-#    REQUISITOS:  OpenCV, Python, Numpy
+#       OPTIONS:   -f FUNCTION, --function FUNCTION
+#                     Set a function to call (video_frame; video_frame_crop,
+#                       cryptometry)
+#                  -p PATH, --path PATH
+#                     Input file or directory of images path
+#  REQUIREMENTS:  OpenCV, Python, Numpy
 #          BUGS:  ---
-#         NOTAS:  ---
+#         NOTES:  ---
 #         AUTOR:  Alan U. Sabino <alan.sabino@usp.br>
-#        VERSÃO:  0.1
-#       CRIAÇÃO:  14/02/2020
-#       REVISÃO:  ---
+#       VERSION:  0.2
+#       CREATED:  14/02/2020
+#      REVISION:  ---
 # =============================================================================
 
 # USAGE
@@ -33,6 +37,9 @@
 # python extract.py -f video_frame_crop -p midia/016-2017.mp4
 # python extract.py -f stitch -p midia/016-2017
 # python extract.py -f stitch -p midia/tres
+# python extract.py -f cryptometry -p midia/stitch100.tif
+# python extract.py -f cryptometry -p midia/stitch300.tif
+
 
 import cv2 as cv
 import numpy as np
@@ -43,6 +50,7 @@ import shutil
 
 
 def video_frame(source, crop=False):
+    # Convert a video to frame images
     vidcap = cv.VideoCapture(source)
     success, image = vidcap.read()
     count = 0
@@ -62,6 +70,7 @@ def video_frame(source, crop=False):
 
 
 def is_dir(source):
+    # Verify if a path is a directory and if it already exists
     isdir = os.path.isdir(source)
     if (isdir):
         option = input("Path "+source+" already exists! Want to Overwrite or save Backup? (o/b)\n")
@@ -75,12 +84,38 @@ def is_dir(source):
 
 
 def remove_text(image):
+    # Remove white text from frame images
     cv.rectangle(image, (0, 0), (80, 30), (0, 0, 0), -1)
     cv.rectangle(image, (496, 504), (576, 584), (0, 0, 0), -1)
     return image
 
 
+def cryptometry(source):
+    image = cv.imread(source)
+    gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+    cryptometry = []
+    cryptometry.append(mama_ratio(gray))
+    print(cryptometry)
+
+
+def mama_ratio(image):
+    gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+    thresh = cv.threshold(gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)[1]
+    close_kernel = cv.getStructuringElement(cv.MORPH_RECT, (15, 3))
+    close = cv.morphologyEx(thresh, cv.MORPH_CLOSE, close_kernel, iterations=1)
+    dilate_kernel = cv.getStructuringElement(cv.MORPH_RECT, (5, 3))
+    dilate = cv.dilate(close, dilate_kernel, iterations=1)
+    cnts = cv.findContours(dilate, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+    cnts = cnts[0] if len(cnts) == 2 else cnts[1]
+    for c in cnts:
+        area = cv.contourArea(c)
+        if area > 800 and area < 15000:
+            x, y, w, h = cv.boundingRect(c)
+            cv.rectangle(image, (x, y), (x + w, y + h), (222, 228, 251), -1)
+
+
 def stitch_stack(source):
+    # Stitch frame images to do a mosaic
     list_images = sorted(os.listdir(source))
     images = []
     for image_name in list_images:
@@ -95,19 +130,26 @@ def stitch_stack(source):
     print("stitching completed successfully.")
 
 
-ap = argparse.ArgumentParser()
-ap.add_argument("-f", "--function", type=str, required=True, help="Set a function to call (video_frame; video_frame_crop)")
-ap.add_argument("-p", "--path", type=str, required=False, help="Input file or directory of images path")
-args = vars(ap.parse_args())
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("-f", "--function", type=str, required=True, help="Set a function to call (video_frame; video_frame_crop, cryptometry)")
+    ap.add_argument("-p", "--path", type=str, required=False, help="Input file or directory of images path")
+    args = vars(ap.parse_args())
 
-function = args["function"]
-source = args["path"]
+    function = args["function"]
+    source = args["path"]
 
-if (function == "video_frame"):
-    video_frame(source)
-elif (function == "video_frame_crop"):
-    video_frame(source, True)
-elif (function == "stitch"):
-    stitch_stack(source)
-else:
-    print("Undefined function")
+    if (function == "video_frame"):
+        video_frame(source)
+    elif (function == "video_frame_crop"):
+        video_frame(source, True)
+    elif (function == "stitch"):
+        stitch_stack(source)
+    elif (function == "cryptometry"):
+        cryptometry(source)
+    else:
+        print("Undefined function")
+
+
+if __name__ == "__main__":
+    main()
