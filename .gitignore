@@ -2,6 +2,23 @@
 # Created by https://www.gitignore.io/api/c,r,c++,latex,emacs,linux,python
 # Edit at https://www.gitignore.io/?templates=c,r,c++,latex,emacs,linux,python
 
+### CMake ###
+CMakeLists.txt.user
+CMakeCache.txt
+CMakeFiles
+CMakeScripts
+Testing
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps
+
+### CMake Patch ###
+# External projects
+*-prefix/
+
 ### C ###
 # Prerequisites
 *.d
@@ -120,6 +137,12 @@ flycheck_*.el
 # Flymd
 flymd.html
 flymd.md
+
+# etags
+**/GPATH
+**/GRTAGS
+**/GTAGS
+**/TAGS
 
 ### LaTeX ###
 ## Core latex/pdflatex auxiliary files:

@@ -62,18 +62,19 @@ def video_frame(source, crop=False):
         image = remove_text(gray_frame)
         if (crop is True):
             image = image[75:500, 75:500]
-        cv.imwrite(path+"/frame%03d.png" % count, image)
-        success, image = vidcap.read()
-        count += 1
-    file = os.path.basename(source)
-    print('Finished ', file)
+            cv.imwrite(path+"/frame%03d.png" % count, image)
+            success, image = vidcap.read()
+            count += 1
+            file = os.path.basename(source)
+            print('Finished ', file)
 
 
 def is_dir(source):
     # Verify if a path is a directory and if it already exists
     isdir = os.path.isdir(source)
     if (isdir):
-        option = input("Path "+source+" already exists! Want to Overwrite or save Backup? (o/b)\n")
+        option = input(
+            "Path "+source+" already exists! Want to Overwrite or save Backup? (o/b)\n")
         if (option == "b"):
             is_dir(source+".BKP")
             os.rename(source, source+'.BKP')
@@ -91,27 +92,42 @@ def remove_text(image):
 
 
 def cryptometry(source):
+    print("Initialize cryptometry")
     image = cv.imread(source)
     gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
     cryptometry = []
     cryptometry.append(mama_ratio(gray))
+    print("Finished cryptometry")
     print(cryptometry)
 
 
 def mama_ratio(image):
-    gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
-    thresh = cv.threshold(gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)[1]
-    close_kernel = cv.getStructuringElement(cv.MORPH_RECT, (15, 3))
-    close = cv.morphologyEx(thresh, cv.MORPH_CLOSE, close_kernel, iterations=1)
-    dilate_kernel = cv.getStructuringElement(cv.MORPH_RECT, (5, 3))
-    dilate = cv.dilate(close, dilate_kernel, iterations=1)
-    cnts = cv.findContours(dilate, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+    print("Initialize Ma/ma ratio")
+    thresh = cv.threshold(
+        image, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)[1]
+
+    kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))
+
+    dilate = cv.dilate(thresh, kernel, iterations=10)
+    erosion = cv.erode(dilate, kernel, iterations=10)
+
+    aux = erosion
+
+    cnts = cv.findContours(aux, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE)
     cnts = cnts[0] if len(cnts) == 2 else cnts[1]
+
+    count = 0
     for c in cnts:
         area = cv.contourArea(c)
-        if area > 800 and area < 15000:
+        if area > 6000 and area < 3100000:
+            count += 1
             x, y, w, h = cv.boundingRect(c)
-            cv.rectangle(image, (x, y), (x + w, y + h), (222, 228, 251), -1)
+            cv.rectangle(aux, (x, y), (x + w, y + h), (127, 127, 127), 3)
+            cv.imwrite("mama.png", aux)
+
+    # cv.imwrite("step.png", thresh)
+    print(count)
+    return 1
 
 
 def stitch_stack(source):
@@ -121,19 +137,21 @@ def stitch_stack(source):
     for image_name in list_images:
         image = cv.imread(source+'/'+image_name)
         images.append(image)
-    stitcher = cv.Stitcher.create(cv.Stitcher_SCANS)
-    status, pano = stitcher.stitch(images)
+        stitcher = cv.Stitcher.create(cv.Stitcher_SCANS)
+        status, pano = stitcher.stitch(images)
     if status != cv.Stitcher_OK:
         print("Can't stitch images, error code = %d" % status)
         sys.exit(-1)
-    cv.imwrite("teste.png", pano)
-    print("stitching completed successfully.")
+        cv.imwrite("teste.png", pano)
+        print("stitching completed successfully.")
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("-f", "--function", type=str, required=True, help="Set a function to call (video_frame; video_frame_crop, cryptometry)")
-    ap.add_argument("-p", "--path", type=str, required=False, help="Input file or directory of images path")
+    ap.add_argument("-f", "--function", type=str, required=True,
+                    help="Set a function to call (video_frame; video_frame_crop, cryptometry)")
+    ap.add_argument("-p", "--path", type=str, required=False,
+                    help="Input file or directory of images path")
     args = vars(ap.parse_args())
 
     function = args["function"]
