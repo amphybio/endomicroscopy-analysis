@@ -75,13 +75,13 @@ def is_dir(source):
     if (isdir):
         option = input(
             "Path "+source+" already exists! Want to Overwrite or save Backup? (o/b)\n")
-        if (option == "b"):
+        if (option == "o"):
+            shutil.rmtree(source)
+            print("Directory overwrited!")
+        else:
             is_dir(source+".BKP")
             os.rename(source, source+'.BKP')
             print("Backup complete! Backup path: ", source+'.BKP')
-        else:
-            shutil.rmtree(source)
-            print("Directory overwrited!")
 
 
 def remove_text(image):
@@ -92,22 +92,30 @@ def remove_text(image):
 
 
 def cryptometry(source):
+    # TODO 1) Create an array with the names of functions and call them in a FOR
+    # loop, print results and create/update a file with measurements; TODO 2)
+    # Get a list of images in a source and make the measurements with all of
+    # them
     print("Initialize cryptometry")
     image = cv.imread(source)
-    gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
     cryptometry = []
-    cryptometry.append(mama_ratio(gray))
-    print("Finished cryptometry")
-    print(cryptometry)
+    cryptometry.append(mama_ratio(image))
+    print("\nParameters\t MEAN\t\t STD")
+    print("Ma/ma ratio\t %.5f\t %.5f" % (cryptometry[0][0], cryptometry[0][1]))
+    print("\nFinished cryptometry")
 
 
 def mama_ratio(image):
-    print("Initialize Ma/ma ratio")
+    # Major axis/minor axis ratio (Ma/ma ratio)
+    # Give the mean and standard deviation of the ratio between the width and
+    # the heigth of the box containing the crypt
+    print("Initialize Major axis/Minor axis ratio")
+    gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
     thresh = cv.threshold(
-        image, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)[1]
+        gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)[1]
 
     kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))
-
+    # TODO 1) Improve parameters to get a more precise crypt sizes
     dilate = cv.dilate(thresh, kernel, iterations=10)
     erosion = cv.erode(dilate, kernel, iterations=10)
 
@@ -116,18 +124,22 @@ def mama_ratio(image):
     cnts = cv.findContours(aux, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE)
     cnts = cnts[0] if len(cnts) == 2 else cnts[1]
 
-    count = 0
+    mama_list = []
+    num_cryptos = 0
     for c in cnts:
         area = cv.contourArea(c)
-        if area > 6000 and area < 3100000:
-            count += 1
-            x, y, w, h = cv.boundingRect(c)
-            cv.rectangle(aux, (x, y), (x + w, y + h), (127, 127, 127), 3)
-            cv.imwrite("mama.png", aux)
-
-    # cv.imwrite("step.png", thresh)
-    print(count)
-    return 1
+        if area > 10000 and area < 310000:
+            num_cryptos += 1
+            x, y, width, heigth = cv.boundingRect(c)
+            if (width > heigth):
+                mama_list.append(width/heigth)
+            else:
+                mama_list.append(heigth/width)
+            cv.rectangle(image, (x, y), (x + width, y + heigth),
+                         (0, 0, 255), 3)
+    cv.imwrite("mama.png", image)
+    print("Number of crypts assessed:", num_cryptos)
+    return np.mean(mama_list), np.std(mama_list)
 
 
 def stitch_stack(source):
