@@ -62,25 +62,26 @@ def video_frame(source, crop=False):
         image = remove_text(gray_frame)
         if (crop is True):
             image = image[75:500, 75:500]
-        cv.imwrite(path+"/frame%03d.png" % count, image)
-        success, image = vidcap.read()
-        count += 1
-    file = os.path.basename(source)
-    print('Finished ', file)
+            cv.imwrite(path+"/frame%03d.png" % count, image)
+            success, image = vidcap.read()
+            count += 1
+            file = os.path.basename(source)
+            print('Finished ', file)
 
 
 def is_dir(source):
     # Verify if a path is a directory and if it already exists
     isdir = os.path.isdir(source)
     if (isdir):
-        option = input("Path "+source+" already exists! Want to Overwrite or save Backup? (o/b)\n")
-        if (option == "b"):
+        option = input(
+            "Path "+source+" already exists! Want to Overwrite or save Backup? (o/b)\n")
+        if (option == "o"):
+            shutil.rmtree(source)
+            print("Directory overwrited!")
+        else:
             is_dir(source+".BKP")
             os.rename(source, source+'.BKP')
             print("Backup complete! Backup path: ", source+'.BKP')
-        else:
-            shutil.rmtree(source)
-            print("Directory overwrited!")
 
 
 def remove_text(image):
@@ -91,27 +92,54 @@ def remove_text(image):
 
 
 def cryptometry(source):
+    # TODO 1) Create an array with the names of functions and call them in a FOR
+    # loop, print results and create/update a file with measurements; TODO 2)
+    # Get a list of images in a source and make the measurements with all of
+    # them
+    print("Initialize cryptometry")
     image = cv.imread(source)
-    gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
     cryptometry = []
-    cryptometry.append(mama_ratio(gray))
-    print(cryptometry)
+    cryptometry.append(mama_ratio(image))
+    print("\nParameters\t MEAN\t\t STD")
+    print("Ma/ma ratio\t %.5f\t %.5f" % (cryptometry[0][0], cryptometry[0][1]))
+    print("\nFinished cryptometry")
 
 
 def mama_ratio(image):
+    # Major axis/minor axis ratio (Ma/ma ratio)
+    # Give the mean and standard deviation of the ratio between the width and
+    # the heigth of the box containing the crypt
+    print("Initialize Major axis/Minor axis ratio")
     gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
-    thresh = cv.threshold(gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)[1]
-    close_kernel = cv.getStructuringElement(cv.MORPH_RECT, (15, 3))
-    close = cv.morphologyEx(thresh, cv.MORPH_CLOSE, close_kernel, iterations=1)
-    dilate_kernel = cv.getStructuringElement(cv.MORPH_RECT, (5, 3))
-    dilate = cv.dilate(close, dilate_kernel, iterations=1)
-    cnts = cv.findContours(dilate, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+    thresh = cv.threshold(
+        gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)[1]
+
+    kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))
+    # TODO 1) Improve parameters to get a more precise crypt sizes
+    dilate = cv.dilate(thresh, kernel, iterations=10)
+    erosion = cv.erode(dilate, kernel, iterations=10)
+
+    aux = erosion
+
+    cnts = cv.findContours(aux, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE)
     cnts = cnts[0] if len(cnts) == 2 else cnts[1]
+
+    mama_list = []
+    num_cryptos = 0
     for c in cnts:
         area = cv.contourArea(c)
-        if area > 800 and area < 15000:
-            x, y, w, h = cv.boundingRect(c)
-            cv.rectangle(image, (x, y), (x + w, y + h), (222, 228, 251), -1)
+        if area > 10000 and area < 310000:
+            num_cryptos += 1
+            x, y, width, heigth = cv.boundingRect(c)
+            if (width > heigth):
+                mama_list.append(width/heigth)
+            else:
+                mama_list.append(heigth/width)
+            cv.rectangle(image, (x, y), (x + width, y + heigth),
+                         (0, 0, 255), 3)
+    cv.imwrite("mama.png", image)
+    print("Number of crypts assessed:", num_cryptos)
+    return np.mean(mama_list), np.std(mama_list)
 
 
 def stitch_stack(source):
@@ -121,19 +149,21 @@ def stitch_stack(source):
     for image_name in list_images:
         image = cv.imread(source+'/'+image_name)
         images.append(image)
-    stitcher = cv.Stitcher.create(cv.Stitcher_SCANS)
-    status, pano = stitcher.stitch(images)
+        stitcher = cv.Stitcher.create(cv.Stitcher_SCANS)
+        status, pano = stitcher.stitch(images)
     if status != cv.Stitcher_OK:
         print("Can't stitch images, error code = %d" % status)
         sys.exit(-1)
-    cv.imwrite("teste.png", pano)
-    print("stitching completed successfully.")
+        cv.imwrite("teste.png", pano)
+        print("stitching completed successfully.")
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("-f", "--function", type=str, required=True, help="Set a function to call (video_frame; video_frame_crop, cryptometry)")
-    ap.add_argument("-p", "--path", type=str, required=False, help="Input file or directory of images path")
+    ap.add_argument("-f", "--function", type=str, required=True,
+                    help="Set a function to call (video_frame; video_frame_crop, cryptometry)")
+    ap.add_argument("-p", "--path", type=str, required=False,
+                    help="Input file or directory of images path")
     args = vars(ap.parse_args())
 
     function = args["function"]
