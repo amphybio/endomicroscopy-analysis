@@ -62,11 +62,11 @@ def video_frame(source, crop=False):
         image = remove_text(gray_frame)
         if (crop is True):
             image = image[75:500, 75:500]
-            cv.imwrite(path+"/frame%03d.png" % count, image)
-            success, image = vidcap.read()
-            count += 1
-            file = os.path.basename(source)
-            print('Finished ', file)
+        cv.imwrite(path+"/frame%03d.png" % count, image)
+        success, image = vidcap.read()
+        count += 1
+    file = os.path.basename(source)
+    print('Finished ', file)
 
 
 def is_dir(source):
@@ -114,7 +114,7 @@ def perimeter(image):
     #                          1.5, 10, param1=300, param2=0.8, minRadius=0, maxRadius=0)
 
     circles = cv.HoughCircles(gray, cv.HOUGH_GRADIENT,
-                              1.2, 20, param1=50, param2=30, minRadius=0, maxRadius=0)
+                              1.2, 100, param1=50, param2=30, minRadius=300, maxRadius=0)
 
     if circles is not None:
         circles = np.round(circles[0, :]).astype("int")
