@@ -100,9 +100,34 @@ def cryptometry(source):
     image = cv.imread(source)
     cryptometry = []
     cryptometry.append(mama_ratio(image))
+    cryptometry.append(perimeter(image))
     print("\nParameters\t MEAN\t\t STD")
     print("Ma/ma ratio\t %.5f\t %.5f" % (cryptometry[0][0], cryptometry[0][1]))
     print("\nFinished cryptometry")
+
+
+def perimeter(image):
+    print("Initialize Perimeter")
+    gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+
+    # circles = cv.HoughCircles(gray, cv.HOUGH_GRADIENT_ALT,
+    #                          1.5, 10, param1=300, param2=0.8, minRadius=0, maxRadius=0)
+
+    circles = cv.HoughCircles(gray, cv.HOUGH_GRADIENT,
+                              1.2, 20, param1=50, param2=30, minRadius=0, maxRadius=0)
+
+    if circles is not None:
+        circles = np.round(circles[0, :]).astype("int")
+
+    num_crypts = 0
+    for(x, y, r) in circles:
+        num_crypts += 1
+        cv.circle(image, (x, y), r, (0, 0, 255), 3)
+        cv.rectangle(image, (x-5, y-5), (x+5, y+5), (0, 255, 0), -1)
+
+    cv.imwrite("perm.png", image)
+    print("Number of crypts assessed:", num_crypts)
+    return 1  # np.mean(mama_list), np.std(mama_list)
 
 
 def mama_ratio(image):
@@ -125,11 +150,11 @@ def mama_ratio(image):
     cnts = cnts[0] if len(cnts) == 2 else cnts[1]
 
     mama_list = []
-    num_cryptos = 0
+    num_crypts = 0
     for c in cnts:
         area = cv.contourArea(c)
         if area > 10000 and area < 310000:
-            num_cryptos += 1
+            num_crypts += 1
             x, y, width, heigth = cv.boundingRect(c)
             if (width > heigth):
                 mama_list.append(width/heigth)
@@ -138,7 +163,7 @@ def mama_ratio(image):
             cv.rectangle(image, (x, y), (x + width, y + heigth),
                          (0, 0, 255), 3)
     cv.imwrite("mama.png", image)
-    print("Number of crypts assessed:", num_cryptos)
+    print("Number of crypts assessed:", num_crypts)
     return np.mean(mama_list), np.std(mama_list)
 
 
