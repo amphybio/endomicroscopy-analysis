@@ -99,10 +99,10 @@ def cryptometry(source):
     print("Initialize cryptometry")
     image = cv.imread(source)
     cryptometry = []
-    cryptometry.append(mama_ratio(image))
+    # cryptometry.append(mama_ratio(image))
     cryptometry.append(perimeter(image))
-    print("\nParameters\t MEAN\t\t STD")
-    print("Ma/ma ratio\t %.5f\t %.5f" % (cryptometry[0][0], cryptometry[0][1]))
+    # print("\nParameters\t MEAN\t\t STD")
+    # print("Ma/ma ratio\t %.5f\t %.5f" % (cryptometry[0][0], cryptometry[0][1]))
     print("\nFinished cryptometry")
 
 
@@ -111,10 +111,10 @@ def perimeter(image):
     gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
 
     # circles = cv.HoughCircles(gray, cv.HOUGH_GRADIENT_ALT,
-    #                          1.5, 10, param1=300, param2=0.8, minRadius=0, maxRadius=0)
+    #                          1.5, 10, param1=300, param2=0.8, minRadius=100, maxRadius=200)
 
     circles = cv.HoughCircles(gray, cv.HOUGH_GRADIENT,
-                              1.2, 100, param1=50, param2=30, minRadius=300, maxRadius=0)
+                              1.2, 300, param1=50, param2=30, minRadius=50, maxRadius=150)
 
     if circles is not None:
         circles = np.round(circles[0, :]).astype("int")
