@@ -99,31 +99,84 @@ def cryptometry(source):
     print("Initialize cryptometry")
     image = cv.imread(source)
     cryptometry = []
-    # cryptometry.append(mama_ratio(image))
-    cryptometry.append(perimeter(image))
-    # print("\nParameters\t MEAN\t\t STD")
-    # print("Ma/ma ratio\t %.5f\t %.5f" % (cryptometry[0][0], cryptometry[0][1]))
+    cryptometry.append(mama_ratio(image.copy()))
+    cryptometry.append(perimeter(image.copy()))
+    print("\nParameters\t MEAN\t\t STD")
+    print("Ma/ma ratio\t %.5f\t %.5f" % (cryptometry[0][0], cryptometry[0][1]))
     print("\nFinished cryptometry")
 
 
 def perimeter(image):
+    # return hough_circles(image)
+    return find_contours(image)
+
+
+def find_contours(image):
+    print("Initialize Perimeter")
+    canvas = np.zeros(image.shape, np.uint8)
+    gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+
+    # Smoothing
+    # kernel = np.ones((5, 5), np.float32)/25
+    # gray = cv.filter2D(gray, -1, kernel)
+
+    thresh = cv.threshold(
+        gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)[1]
+
+    # im2, contours, hierarchy = cv.findContours(
+    #     thresh, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
+
+    contours, a = cv.findContours(thresh, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
+
+    # contours = cv.findContours(thresh, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE)
+
+    cnt = contours[0]
+    # print(cnt)
+    # cv.imwrite("perm.png", cnt)
+
+    num_crypts = 0
+    if cnt is not None:
+        max_area = cv.contourArea(cnt)
+        print(max_area)
+        for cont in contours:
+            #max_area = cv.contourArea(cont)
+            if cv.contourArea(cont) > max_area:
+                num_crypts += 1
+                cnt = cont
+                max_area = cv.contourArea(cont)
+
+    perimeter = cv.arcLength(cnt, True)
+    epsilon = 0.01*cv.arcLength(cnt, True)
+    approx = cv.approxPolyDP(cnt, epsilon, True)
+
+    hull = cv.convexHull(cnt)
+
+    cv.drawContours(canvas, cnt, -1, (0, 255, 0), 3)
+    cv.drawContours(canvas, [approx], -1, (0, 0, 255), 3)
+    # cv.drawContours(canvas, hull, -1, (0, 0, 255), 3) # only displays a few points as well.
+
+    cv.imshow("Contour", canvas)
+    k = cv.waitKey(0)
+
+    if k == 27:         # wait for ESC key to exit
+        cv.destroyAllWindows()
+    return 1
+
+
+def hough_circles(image):
     print("Initialize Perimeter")
     gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
 
-    # circles = cv.HoughCircles(gray, cv.HOUGH_GRADIENT_ALT,
-    #                          1.5, 10, param1=300, param2=0.8, minRadius=100, maxRadius=200)
-
     circles = cv.HoughCircles(gray, cv.HOUGH_GRADIENT,
-                              1.2, 300, param1=50, param2=30, minRadius=50, maxRadius=150)
-
-    if circles is not None:
-        circles = np.round(circles[0, :]).astype("int")
+                              1.5, 185, param1=20, param2=150, minRadius=95, maxRadius=185)
 
     num_crypts = 0
-    for(x, y, r) in circles:
-        num_crypts += 1
-        cv.circle(image, (x, y), r, (0, 0, 255), 3)
-        cv.rectangle(image, (x-5, y-5), (x+5, y+5), (0, 255, 0), -1)
+    if circles is not None:
+        circles = np.round(circles[0, :]).astype("int")
+        for(x, y, r) in circles:
+            num_crypts += 1
+            cv.circle(image, (x, y), r, (0, 0, 255), 3)
+            cv.rectangle(image, (x-5, y-5), (x+5, y+5), (0, 255, 0), -1)
 
     cv.imwrite("perm.png", image)
     print("Number of crypts assessed:", num_crypts)
