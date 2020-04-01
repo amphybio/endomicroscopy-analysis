@@ -116,50 +116,32 @@ def find_contours(image):
     canvas = np.zeros(image.shape, np.uint8)
     gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
 
-    # Smoothing
-    # kernel = np.ones((5, 5), np.float32)/25
-    # gray = cv.filter2D(gray, -1, kernel)
-
     thresh = cv.threshold(
         gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)[1]
 
     # im2, contours, hierarchy = cv.findContours(
     #     thresh, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
-
-    contours, a = cv.findContours(thresh, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
-
+    #contours, a = cv.findContours(thresh, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
+    contours, a = cv.findContours(thresh, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
     # contours = cv.findContours(thresh, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE)
 
     cnt = contours[0]
-    # print(cnt)
-    # cv.imwrite("perm.png", cnt)
-
     num_crypts = 0
     if cnt is not None:
-        max_area = cv.contourArea(cnt)
-        print(max_area)
         for cont in contours:
-            #max_area = cv.contourArea(cont)
-            if cv.contourArea(cont) > max_area:
+            area = cv.contourArea(cont)
+            if area > 10000 and area < 310000:
                 num_crypts += 1
-                cnt = cont
-                max_area = cv.contourArea(cont)
+                epsilon = 0.01*cv.arcLength(cont, True)
+                approx = cv.approxPolyDP(cont, epsilon, True)
+                cv.drawContours(canvas, cont, -1, (0, 255, 0), 3)
+                cv.drawContours(canvas, [approx], -1, (0, 0, 255), 3)
 
     perimeter = cv.arcLength(cnt, True)
-    epsilon = 0.01*cv.arcLength(cnt, True)
-    approx = cv.approxPolyDP(cnt, epsilon, True)
-
     hull = cv.convexHull(cnt)
 
-    cv.drawContours(canvas, cnt, -1, (0, 255, 0), 3)
-    cv.drawContours(canvas, [approx], -1, (0, 0, 255), 3)
-    # cv.drawContours(canvas, hull, -1, (0, 0, 255), 3) # only displays a few points as well.
-
-    cv.imshow("Contour", canvas)
-    k = cv.waitKey(0)
-
-    if k == 27:         # wait for ESC key to exit
-        cv.destroyAllWindows()
+    print("Number of crypts assessed:", num_crypts)
+    cv.imwrite("perm.png", canvas)
     return 1
 
 
