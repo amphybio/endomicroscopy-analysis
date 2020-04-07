@@ -101,21 +101,17 @@ def cryptometry(source):
     cryptometry = []
     cryptometry.append(mama_ratio(image.copy()))
     cryptometry.append(perimeter(image.copy()))
-    print("\nParameters\t MEAN\t\t STD")
-    print("Ma/ma ratio\t %.5f\t %.5f" % (cryptometry[0][0], cryptometry[0][1]))
-    print("Perimeter(px)\t %.5f\t %.5f" %
+    print("\nParameters\t MEAN\t STD")
+    print("Ma/ma ratio\t %.2f\t %.2f" %
+          (cryptometry[0][0], cryptometry[0][1]))
+    print("Perimeter(px)\t %.2f\t %.2f" %
           (cryptometry[1][0], cryptometry[1][1]))
-    print("Sphericity(%%)\t %.5f\t %.5f" %
+    print("Sphericity(%%)\t %.2f\t %.2f" %
           (cryptometry[1][2], cryptometry[1][3]))
     print("\nFinished cryptometry")
 
 
 def perimeter(image):
-    # return hough_circles(image)
-    return find_contours(image)
-
-
-def find_contours(image):
     print("Initialize Perimeter")
     gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
 
@@ -127,8 +123,6 @@ def find_contours(image):
     dilate = cv.dilate(thresh, kernel, iterations=10)
     erosion = cv.erode(dilate, kernel, iterations=10)
 
-    # im2, contours, hierarchy = cv.findContours(
-    #     thresh, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
     contours, hierarchy = cv.findContours(
         erosion, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
 
@@ -152,26 +146,6 @@ def find_contours(image):
     print("Number of crypts assessed:", num_crypts)
     cv.imwrite("perm.png", image)
     return np.mean(perim_list), np.std(perim_list), np.mean(spher_list)*100, np.std(spher_list)*100
-
-
-def hough_circles(image):
-    print("Initialize Perimeter")
-    gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
-
-    circles = cv.HoughCircles(gray, cv.HOUGH_GRADIENT,
-                              1.5, 185, param1=20, param2=150, minRadius=95, maxRadius=185)
-
-    num_crypts = 0
-    if circles is not None:
-        circles = np.round(circles[0, :]).astype("int")
-        for(x, y, r) in circles:
-            num_crypts += 1
-            cv.circle(image, (x, y), r, (0, 0, 255), 3)
-            cv.rectangle(image, (x-5, y-5), (x+5, y+5), (0, 255, 0), -1)
-
-    cv.imwrite("perm.png", image)
-    print("Number of crypts assessed:", num_crypts)
-    return 1  # np.mean(mama_list), np.std(mama_list)
 
 
 def mama_ratio(image):
