@@ -103,6 +103,10 @@ def cryptometry(source):
     cryptometry.append(perimeter(image.copy()))
     print("\nParameters\t MEAN\t\t STD")
     print("Ma/ma ratio\t %.5f\t %.5f" % (cryptometry[0][0], cryptometry[0][1]))
+    print("Perimeter(px)\t %.5f\t %.5f" %
+          (cryptometry[1][0], cryptometry[1][1]))
+    print("Sphericity(%%)\t %.5f\t %.5f" %
+          (cryptometry[1][2], cryptometry[1][3]))
     print("\nFinished cryptometry")
 
 
@@ -113,36 +117,41 @@ def perimeter(image):
 
 def find_contours(image):
     print("Initialize Perimeter")
-    canvas = np.zeros(image.shape, np.uint8)
     gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
 
     thresh = cv.threshold(
         gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)[1]
 
+    kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))
+    # TODO 1) Improve parameters to get a more precise crypt sizes
+    dilate = cv.dilate(thresh, kernel, iterations=10)
+    erosion = cv.erode(dilate, kernel, iterations=10)
+
     # im2, contours, hierarchy = cv.findContours(
     #     thresh, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
-    #contours, a = cv.findContours(thresh, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
-    contours, a = cv.findContours(thresh, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
-    # contours = cv.findContours(thresh, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE)
+    contours, hierarchy = cv.findContours(
+        erosion, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
 
     cnt = contours[0]
     num_crypts = 0
+    perim_list = []
+    spher_list = []
     if cnt is not None:
         for cont in contours:
             area = cv.contourArea(cont)
             if area > 10000 and area < 310000:
+                perimeter = cv.arcLength(cont, True)
+                perim_list.append(perimeter)
+                spher_list.append((4 * np.pi * area) / (perimeter ** 2))
                 num_crypts += 1
-                epsilon = 0.01*cv.arcLength(cont, True)
-                approx = cv.approxPolyDP(cont, epsilon, True)
-                cv.drawContours(canvas, cont, -1, (0, 255, 0), 3)
-                cv.drawContours(canvas, [approx], -1, (0, 0, 255), 3)
-
-    perimeter = cv.arcLength(cnt, True)
-    hull = cv.convexHull(cnt)
+                # epsilon = 0.007 * cv.arcLength(cont, True)
+                # approx = cv.approxPolyDP(cont, epsilon, True)
+                # cv.drawContours(image, [approx], -1, (0, 255, 0), 3)
+                cv.drawContours(image, cont, -1, (0, 0, 255), 3)
 
     print("Number of crypts assessed:", num_crypts)
-    cv.imwrite("perm.png", canvas)
-    return 1
+    cv.imwrite("perm.png", image)
+    return np.mean(perim_list), np.std(perim_list), np.mean(spher_list)*100, np.std(spher_list)*100
 
 
 def hough_circles(image):
