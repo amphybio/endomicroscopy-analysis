@@ -33,6 +33,7 @@
 # =============================================================================
 
 # USAGE
+# python extract.py -f dir_structure -p midia/main/1234
 # python extract.py -f video_frame -p midia/016-2017.mp4
 # python extract.py -f video_frame_crop -p midia/016-2017.mp4
 # python extract.py -f stitch -p midia/016-2017
@@ -47,6 +48,27 @@ import argparse
 import os
 import sys
 import shutil
+
+
+def dir_structure(source):  # midia/main/1234
+    isdir = os.path.isdir(source)
+    if (isdir):
+        option = input(
+            "Path "+source+" already exists! Want to send to sandbox? (y/n)\n")
+        if (option == "y"):
+            # shutil.rmtree(source)
+            print("Directory overwrited!")
+        else:
+            print("Nothing to do here!")
+    else:
+        os.mkdir(source)
+        for path in {"frames", "figs", "plots", "videos"}:
+            os.mkdir(source+"/"+path)
+        print("Directory structure created! Source: "+source)
+
+
+def send_sandbox(source):
+    print("a")
 
 
 def video_frame(source, crop=False):
@@ -220,6 +242,8 @@ def main():
         stitch_stack(source)
     elif (function == "cryptometry"):
         cryptometry(source)
+    elif (function == "dir_structure"):
+        dir_structure(source)
     else:
         print("Undefined function")
 
