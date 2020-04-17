@@ -48,27 +48,51 @@ import argparse
 import os
 import sys
 import shutil
+import subprocess
+import pathlib
 
 
 def dir_structure(source):  # midia/main/1234
-    isdir = os.path.isdir(source)
-    if (isdir):
+    path = pathlib.Path(source)
+    if (path.is_dir()):
         option = input(
             "Path "+source+" already exists! Want to send to sandbox? (y/n)\n")
         if (option == "y"):
-            # shutil.rmtree(source)
-            print("Directory overwrited!")
+            print("Directory sent to sandbox! Code:", send_sandbox(source))
         else:
             print("Nothing to do here!")
     else:
-        os.mkdir(source)
-        for path in {"frames", "figs", "plots", "videos"}:
-            os.mkdir(source+"/"+path)
+        path.mkdir()
+        for struct in {"frames", "figs", "plots", "videos"}:
+            pathlib.Path(source+"/"+struct).mkdir()
         print("Directory structure created! Source: "+source)
 
 
 def send_sandbox(source):
-    print("a")
+    path = pathlib.Path(source)
+    id = path.name
+    dest_path = path.parent.parent / "sandbox" / id
+
+    if not dest_path.is_dir():
+        dest_path.mkdir()
+
+    count = subprocess.run("find . -maxdepth 1 -type f | wc -l", cwd=dest_path,
+                           shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+    id_sand = '{:04d}'.format(int(count.stdout))
+
+    subprocess.run("zip -r "+id_sand+".zip frames/ figs/ plots/", cwd=path,
+                   shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+    mv = subprocess.run("mv -vn "+id_sand+".zip "+str(dest_path.absolute()), cwd=path,
+                        shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+
+    if (mv.stdout == '') or (mv.stderr is not None):
+        print("Error: file already exists or exiting with error:", mv.stderr)
+        quit()
+
+    subprocess.run("rm -rf frames/* figs/* plots/*", cwd=path,
+                   shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+
+    return id_sand
 
 
 def video_frame(source, crop=False):
