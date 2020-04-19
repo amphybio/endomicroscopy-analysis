@@ -34,25 +34,22 @@
 
 # USAGE
 # python extract.py -f dir_structure -p midia/main/1234
-# python extract.py -f video_frame -p midia/016-2017.mp4
-# python extract.py -f video_frame_crop -p midia/016-2017.mp4
-# python extract.py -f stitch -p midia/016-2017
-# python extract.py -f stitch -p midia/tres
+# python extract.py -f video_frame -p midia/main/1234/videos/016-2017.mp4
+# python extract.py -f video_frame_crop -p midia/main/1234/videos/016-2017.mp4
+# python extract.py -f stitch -p midia/main/1234/frames/016-2017
 # python extract.py -f cryptometry -p midia/stitch100.tif
-# python extract.py -f cryptometry -p midia/stitch300.tif
 
 
 import cv2 as cv
 import numpy as np
 import argparse
-import os
 import sys
 import shutil
 import subprocess
 import pathlib
 
 
-def dir_structure(source):  # midia/main/1234
+def dir_structure(source):
     path = pathlib.Path(source)
     if (path.is_dir()):
         option = input(
@@ -62,47 +59,43 @@ def dir_structure(source):  # midia/main/1234
         else:
             print("Nothing to do here!")
     else:
+        dir_list = {"frames/", "figs/", "plots/", "videos/"}
         path.mkdir()
-        for struct in {"frames", "figs", "plots", "videos"}:
-            pathlib.Path(source+"/"+struct).mkdir()
-        print("Directory structure created! Source: "+source)
+        for dirt in dir_list:
+            pathlib.Path(source+'/'+dirt).mkdir()
+        print("Directory structure created! Source:", source)
 
 
-def send_sandbox(source):
+def send_sandbox(source, dir_list={"frames/", "figs/", "plots/"}):
     path = pathlib.Path(source)
     id = path.name
-    dest_path = path.parent.parent / "sandbox" / id
-
+    dest_path = path.parents[1] / "sandbox" / id
     if not dest_path.is_dir():
         dest_path.mkdir()
-
     count = subprocess.run("find . -maxdepth 1 -type f | wc -l", cwd=dest_path,
                            shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
     id_sand = '{:04d}'.format(int(count.stdout))
-
-    subprocess.run("zip -r "+id_sand+".zip frames/ figs/ plots/", cwd=path,
-                   shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+    for dirt in dir_list:
+        subprocess.run("zip -r "+id_sand+".zip "+dirt, cwd=path,
+                       shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+        subprocess.run("rm -rf "+dirt+"*", cwd=path,
+                       shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
     mv = subprocess.run("mv -vn "+id_sand+".zip "+str(dest_path.absolute()), cwd=path,
                         shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
-
-    if (mv.stdout == '') or (mv.stderr is not None):
-        print("Error: file already exists or exiting with error:", mv.stderr)
-        quit()
-
-    subprocess.run("rm -rf frames/* figs/* plots/*", cwd=path,
-                   shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
-
+    if (mv.stdout == ''):
+        print("Error to move: file already exists!")
     return id_sand
 
 
 def video_frame(source, crop=False):
     # Convert a video to frame images
+
+    path = pathlib.Path(source).stem
+    is_dir(path)
+    path.mkdir()
     vidcap = cv.VideoCapture(source)
     success, image = vidcap.read()
     count = 0
-    path = os.path.splitext(source)[0]
-    is_dir(path)
-    os.mkdir(path)
     while success:
         gray_frame = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
         image = remove_text(gray_frame)
@@ -111,8 +104,7 @@ def video_frame(source, crop=False):
         cv.imwrite(path+"/frame%03d.png" % count, image)
         success, image = vidcap.read()
         count += 1
-    file = os.path.basename(source)
-    print('Finished ', file)
+    print("Finished:", source)
 
 
 def is_dir(source):
