@@ -43,56 +43,76 @@
 import cv2 as cv
 import numpy as np
 import argparse
-import sys
-import shutil
 import subprocess
 import pathlib
+import sys
 
 
 def dir_structure(source):
     path = pathlib.Path(source)
-    if (path.is_dir()):
+    dir_list = ["frames/", "figs/", "plots/", "videos/"]
+    if path.is_dir():
         option = input(
-            "Path "+source+" already exists! Want to send to sandbox? (y/n)\n")
-        if (option == "y"):
-            print("Directory sent to sandbox! Code:", send_sandbox(source))
+            "Path %s already exists! Want to send to sandbox? (y/n) Caution:"
+            " to press n will overwrite directory\n" % source)
+        if option == "y":
+            print("Directory sent to sandbox! Code: %s" %
+                  send_sandbox(source, dir_list))
+        elif option == "n":
+            subprocess.run("rm -rf "+str(path.absolute()), shell=True,
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+            print("Directory %s deleted!" % source)
+            path.mkdir()
         else:
-            print("Nothing to do here!")
+            print("Option unavailable!")
+            sys.exit()
     else:
-        dir_list = {"frames/", "figs/", "plots/", "videos/"}
         path.mkdir()
-        for dirt in dir_list:
-            pathlib.Path(source+'/'+dirt).mkdir()
-        print("Directory structure created! Source:", source)
+    for dire in dir_list:
+        pathlib.Path(source+'/'+dire).mkdir()
+    print("Directory structure created! Source: %s" % source)
 
 
-def send_sandbox(source, dir_list={"frames/", "figs/", "plots/"}):
+def send_sandbox(source, dir_list):
     path = pathlib.Path(source)
-    id = path.name
-    dest_path = path.parents[1] / "sandbox" / id
+    key = path.name
+    dest_path = path.parents[1] / "sandbox" / key
     if not dest_path.is_dir():
         dest_path.mkdir()
     count = subprocess.run("find . -maxdepth 1 -type f | wc -l", cwd=dest_path,
                            shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
-    id_sand = '{:04d}'.format(int(count.stdout))
-    for dirt in dir_list:
-        subprocess.run("zip -r "+id_sand+".zip "+dirt, cwd=path,
+    key_sand = '{:04d}'.format(int(count.stdout))
+    for dire in dir_list:
+        subprocess.run("zip -r "+key_sand+".zip "+dire, cwd=path,
                        shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
-        subprocess.run("rm -rf "+dirt+"*", cwd=path,
+        subprocess.run("rm -rf "+dire, cwd=path,
                        shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
-    mv = subprocess.run("mv -vn "+id_sand+".zip "+str(dest_path.absolute()), cwd=path,
+    mv = subprocess.run("mv -vn "+key_sand+".zip "+str(dest_path.absolute()), cwd=path,
                         shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
     if (mv.stdout == ''):
         print("Error to move: file already exists!")
-    return id_sand
+    return key_sand
 
 
 def video_frame(source, crop=False):
     # Convert a video to frame images
-
-    path = pathlib.Path(source).stem
-    is_dir(path)
-    path.mkdir()
+    path = pathlib.Path(source)
+    dire = path.parents[1] / "frames" / path.stem
+    if dire.is_dir():
+        option = input(
+            "Path %s already exists! Want to send to sandbox? (y/n) Caution: "
+            "to press n will overwrite directory\n" % str(dire))
+        if (option == "y"):
+            print("Directory sent to sandbox! Code:",
+                  send_sandbox(path.parents[1], ["frames/"+path.stem+'/']))
+        elif option == "n":
+            subprocess.run("rm -rf "+str(dire.absolute()), shell=True,
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+            print("Directory %s deleted!" % str(dire))
+        else:
+            print("Option unavailable!")
+            sys.exit()
+    dire.mkdir()
     vidcap = cv.VideoCapture(source)
     success, image = vidcap.read()
     count = 0
@@ -101,25 +121,10 @@ def video_frame(source, crop=False):
         image = remove_text(gray_frame)
         if (crop is True):
             image = image[75:500, 75:500]
-        cv.imwrite(path+"/frame%03d.png" % count, image)
+        cv.imwrite(str(dire)+"/frame%03d.png" % count, image)
         success, image = vidcap.read()
         count += 1
     print("Finished:", source)
-
-
-def is_dir(source):
-    # Verify if a path is a directory and if it already exists
-    isdir = os.path.isdir(source)
-    if (isdir):
-        option = input(
-            "Path "+source+" already exists! Want to Overwrite or save Backup? (o/b)\n")
-        if (option == "o"):
-            shutil.rmtree(source)
-            print("Directory overwrited!")
-        else:
-            is_dir(source+".BKP")
-            os.rename(source, source+'.BKP')
-            print("Backup complete! Backup path: ", source+'.BKP')
 
 
 def remove_text(image):
@@ -223,20 +228,20 @@ def mama_ratio(image):
     return np.mean(mama_list), np.std(mama_list)
 
 
-def stitch_stack(source):
-    # Stitch frame images to do a mosaic
-    list_images = sorted(os.listdir(source))
-    images = []
-    for image_name in list_images:
-        image = cv.imread(source+'/'+image_name)
-        images.append(image)
-        stitcher = cv.Stitcher.create(cv.Stitcher_SCANS)
-        status, pano = stitcher.stitch(images)
-    if status != cv.Stitcher_OK:
-        print("Can't stitch images, error code = %d" % status)
-        sys.exit(-1)
-        cv.imwrite("teste.png", pano)
-        print("stitching completed successfully.")
+# def stitch_stack(source):
+#     # Stitch frame images to do a mosaic
+#     list_images = sorted(os.listdir(source))
+#     images = []
+#     for image_name in list_images:
+#         image = cv.imread(source+'/'+image_name)
+#         images.append(image)
+#         stitcher = cv.Stitcher.create(cv.Stitcher_SCANS)
+#         status, pano = stitcher.stitch(images)
+#     if status != cv.Stitcher_OK:
+#         print("Can't stitch images, error code = %d" % status)
+#         sys.exit(-1)
+#         cv.imwrite("teste.png", pano)
+#         print("stitching completed successfully.")
 
 
 def main():
@@ -254,8 +259,8 @@ def main():
         video_frame(source)
     elif (function == "video_frame_crop"):
         video_frame(source, True)
-    elif (function == "stitch"):
-        stitch_stack(source)
+    # elif (function == "stitch"):
+    #     stitch_stack(source)
     elif (function == "cryptometry"):
         cryptometry(source)
     elif (function == "dir_structure"):
