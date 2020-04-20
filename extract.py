@@ -35,7 +35,7 @@
 # USAGE
 # python extract.py -f video_frame -p midia/main/1234/016-2017.mp4
 # python extract.py -f video_frame_crop -p midia/main/1234/016-2017.mp4
-# python extract.py -f stitch -p midia/main/1234/frames/016-2017
+# python extract.py -f stitch -p midia/main/1234/frame/016-2017
 # python extract.py -f cryptometry -p midia/main/1234/stitch100.tif
 
 
@@ -54,6 +54,7 @@ def dir_structure(path, dir_list):
             path_dir.mkdir()
         sub_dir = path_dir / path.stem
         dir_exists(sub_dir)
+        sub_dir.mkdir()
         print("New directory structure was created! Source: %s" % str(sub_dir))
 
 
@@ -67,7 +68,7 @@ def dir_exists(path):
                 hierarchy = path.parts
                 main_index = hierarchy.index("main")
                 path_index = len(hierarchy)-(2 + max(0, main_index-1))
-                print("Directory sent to sandbox! Code: %s" %
+                print("Directory was sent to sandbox! Code: %s" %
                       send_sandbox(path, (path.parents[path_index] / "sandbox" / hierarchy[main_index+1])))
             else:
                 print("Directory 'main' not found! Exiting...")
@@ -77,9 +78,8 @@ def dir_exists(path):
                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
             print("Directory %s was deleted!" % str(path))
         else:
-            print("Option unavailable!")
+            print("Option unavailable! Exiting...")
             sys.exit()
-    path.mkdir()
 
 
 def send_sandbox(path, dest_path):
@@ -102,15 +102,15 @@ def send_sandbox(path, dest_path):
 def video_frame(source, crop=False):
     # Convert a video to frame images
     path = pathlib.Path(source)
-    dir_structure(path, ["frames"])
-    sub_dir = path.parents[0] / "frames" / path.stem
+    dir_structure(path, ["frame"])
+    sub_dir = path.parents[0] / "frame" / path.stem
     vidcap = cv.VideoCapture(source)
     success, image = vidcap.read()
     count = 0
     while success:
         gray_frame = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
         image = remove_text(gray_frame)
-        if (crop is True):
+        if crop is True:
             image = image[75:500, 75:500]
         cv.imwrite(str(sub_dir)+"/frame%03d.png" % count, image)
         success, image = vidcap.read()
@@ -131,13 +131,12 @@ def cryptometry(source):
     # Get a list of images in a source and make the measurements with all of
     # them
     path = pathlib.Path(source)
-    dir_structure(path, ["figs", "plots"])
-    sys.exit()
-    # nome final tem de ter relação com o nome da imagem, nao sobreescrever
+    dir_list = ["fig", "plot"]
+    dir_structure(path, dir_list)
     print("Initialize cryptometry")
     image = cv.imread(source)
     cryptometry = []
-    cryptometry.append(mama_ratio(image.copy()))
+    cryptometry.append(axis_ratio(image.copy()))
     cryptometry.append(perimeter(image.copy()))
     print("\nParameters\t MEAN\t STD")
     print("Ma/ma ratio\t %.2f\t %.2f" %
@@ -147,23 +146,22 @@ def cryptometry(source):
     print("Sphericity(%%)\t %.2f\t %.2f" %
           (cryptometry[1][2], cryptometry[1][3]))
     print("\nFinished cryptometry")
+    for sub_dir in dir_list:
+        subprocess.run("mv -vn *"+sub_dir+".png "+str(path.parents[0] / sub_dir / path.stem),
+                       shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
 
 
 def perimeter(image):
     print("Initialize Perimeter")
     gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
-
     thresh = cv.threshold(
         gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)[1]
-
     kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))
     # TODO 1) Improve parameters to get a more precise crypt sizes
     dilate = cv.dilate(thresh, kernel, iterations=10)
     erosion = cv.erode(dilate, kernel, iterations=10)
-
     contours, hierarchy = cv.findContours(
         erosion, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
-
     cnt = contours[0]
     num_crypts = 0
     perim_list = []
@@ -180,31 +178,26 @@ def perimeter(image):
                 # approx = cv.approxPolyDP(cont, epsilon, True)
                 # cv.drawContours(image, [approx], -1, (0, 255, 0), 3)
                 cv.drawContours(image, cont, -1, (0, 0, 255), 3)
-
     print("Number of crypts assessed:", num_crypts)
-    cv.imwrite("perm.png", image)
+    cv.imwrite("perim_fig.png", image)
     return np.mean(perim_list), np.std(perim_list), np.mean(spher_list)*100, np.std(spher_list)*100
 
 
-def mama_ratio(image):
-    # Major axis/minor axis ratio (Ma/ma ratio)
+def axis_ratio(image):
+    # Ratio between major and minor axis (Ma/ma ratio)
     # Give the mean and standard deviation of the ratio between the width and
     # the heigth of the box containing the crypt
-    print("Initialize Major axis/Minor axis ratio")
+    print("Initialize axis ratio")
     gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
     thresh = cv.threshold(
         gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)[1]
-
     kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))
     # TODO 1) Improve parameters to get a more precise crypt sizes
     dilate = cv.dilate(thresh, kernel, iterations=10)
     erosion = cv.erode(dilate, kernel, iterations=10)
-
     aux = erosion
-
     cnts = cv.findContours(aux, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE)
     cnts = cnts[0] if len(cnts) == 2 else cnts[1]
-
     mama_list = []
     num_crypts = 0
     for c in cnts:
@@ -218,7 +211,7 @@ def mama_ratio(image):
                 mama_list.append(heigth/width)
             cv.rectangle(image, (x, y), (x + width, y + heigth),
                          (0, 0, 255), 3)
-    cv.imwrite("mama.png", image)
+    cv.imwrite("axisr_fig.png", image)
     print("Number of crypts assessed:", num_crypts)
     return np.mean(mama_list), np.std(mama_list)
 
