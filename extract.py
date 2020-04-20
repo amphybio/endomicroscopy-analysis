@@ -50,69 +50,56 @@ import sys
 
 def dir_structure(source):
     path = pathlib.Path(source)
-    dir_list = ["frames/", "figs/", "plots/", "videos/"]
     if path.is_dir():
         option = input(
             "Path %s already exists! Want to send to sandbox? (y/n) Caution:"
             " to press n will overwrite directory\n" % source)
         if option == "y":
-            print("Directory sent to sandbox! Code: %s" %
-                  send_sandbox(source, dir_list))
+            if "main" in str(path):
+                hierarchy = path.parts
+                main_index = hierarchy.index("main")
+                path_index = len(hierarchy)-(2 + max(0, main_index-1))
+                print("Directory sent to sandbox! Code: %s" %
+                      send_sandbox(path, (path.parents[path_index] / "sandbox" / hierarchy[main_index+1])))
+            else:
+                print("Directory 'main' not found! Exiting...")
+                sys.exit()
         elif option == "n":
-            subprocess.run("rm -rf "+str(path.absolute()), shell=True,
+            subprocess.run("rm -rf "+str(path.resolve()), shell=True,
                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
             print("Directory %s deleted!" % source)
-            path.mkdir()
         else:
             print("Option unavailable!")
             sys.exit()
-    else:
-        path.mkdir()
-    for dire in dir_list:
-        pathlib.Path(source+'/'+dire).mkdir()
-    print("Directory structure created! Source: %s" % source)
+    if path.mkdir():
+        print("New directory structure created! Source: %s" % source)
 
 
-def send_sandbox(source, dir_list):
-    path = pathlib.Path(source)
-    key = path.name
-    dest_path = path.parents[1] / "sandbox" / key
+def send_sandbox(path, dest_path):
     if not dest_path.is_dir():
         dest_path.mkdir()
     count = subprocess.run("find . -maxdepth 1 -type f | wc -l", cwd=dest_path,
                            shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
     key_sand = '{:04d}'.format(int(count.stdout))
-    for dire in dir_list:
-        subprocess.run("zip -r "+key_sand+".zip "+dire, cwd=path,
-                       shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
-        subprocess.run("rm -rf "+dire, cwd=path,
-                       shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
-    mv = subprocess.run("mv -vn "+key_sand+".zip "+str(dest_path.absolute()), cwd=path,
+    subprocess.run("zip -r "+key_sand+".zip "+str(path),
+                   shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+    subprocess.run("rm -rf "+str(path.resolve()),
+                   shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+    mv = subprocess.run("mv -vn "+key_sand+".zip "+str(dest_path.resolve()),
                         shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
     if (mv.stdout == ''):
-        print("Error to move: file already exists!")
+        print("Error to move: destination path already exists!")
     return key_sand
 
 
 def video_frame(source, crop=False):
     # Convert a video to frame images
     path = pathlib.Path(source)
-    dire = path.parents[1] / "frames" / path.stem
-    if dire.is_dir():
-        option = input(
-            "Path %s already exists! Want to send to sandbox? (y/n) Caution: "
-            "to press n will overwrite directory\n" % str(dire))
-        if (option == "y"):
-            print("Directory sent to sandbox! Code:",
-                  send_sandbox(path.parents[1], ["frames/"+path.stem+'/']))
-        elif option == "n":
-            subprocess.run("rm -rf "+str(dire.absolute()), shell=True,
-                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
-            print("Directory %s deleted!" % str(dire))
-        else:
-            print("Option unavailable!")
-            sys.exit()
-    dire.mkdir()
+    frame_dir = path.parents[1] / "frames"
+    if not frame_dir.is_dir():
+        frame_dir.mkdir()
+    dire = frame_dir / path.stem
+    dir_structure(str(dire))
     vidcap = cv.VideoCapture(source)
     success, image = vidcap.read()
     count = 0
@@ -139,6 +126,8 @@ def cryptometry(source):
     # loop, print results and create/update a file with measurements; TODO 2)
     # Get a list of images in a source and make the measurements with all of
     # them
+
+    # nome final tem de ter relação com o nome da imagem, nao sobreescrever
     print("Initialize cryptometry")
     image = cv.imread(source)
     cryptometry = []
