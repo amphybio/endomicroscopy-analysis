@@ -33,11 +33,10 @@
 # =============================================================================
 
 # USAGE
-# python extract.py -f dir_structure -p midia/main/1234
-# python extract.py -f video_frame -p midia/main/1234/videos/016-2017.mp4
-# python extract.py -f video_frame_crop -p midia/main/1234/videos/016-2017.mp4
+# python extract.py -f video_frame -p midia/main/1234/016-2017.mp4
+# python extract.py -f video_frame_crop -p midia/main/1234/016-2017.mp4
 # python extract.py -f stitch -p midia/main/1234/frames/016-2017
-# python extract.py -f cryptometry -p midia/stitch100.tif
+# python extract.py -f cryptometry -p midia/main/1234/stitch100.tif
 
 
 import cv2 as cv
@@ -48,12 +47,21 @@ import pathlib
 import sys
 
 
-def dir_structure(source):
-    path = pathlib.Path(source)
+def dir_structure(path, dir_list):
+    for dire in dir_list:
+        path_dir = path.parents[0] / dire
+        if not path_dir.is_dir():
+            path_dir.mkdir()
+        sub_dir = path_dir / path.stem
+        dir_exists(sub_dir)
+        print("New directory structure was created! Source: %s" % str(sub_dir))
+
+
+def dir_exists(path):
     if path.is_dir():
         option = input(
             "Path %s already exists! Want to send to sandbox? (y/n) Caution:"
-            " to press n will overwrite directory\n" % source)
+            " to press n will overwrite directory\n" % str(path))
         if option == "y":
             if "main" in str(path):
                 hierarchy = path.parts
@@ -67,12 +75,11 @@ def dir_structure(source):
         elif option == "n":
             subprocess.run("rm -rf "+str(path.resolve()), shell=True,
                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
-            print("Directory %s deleted!" % source)
+            print("Directory %s was deleted!" % str(path))
         else:
             print("Option unavailable!")
             sys.exit()
-    if path.mkdir():
-        print("New directory structure created! Source: %s" % source)
+    path.mkdir()
 
 
 def send_sandbox(path, dest_path):
@@ -95,11 +102,8 @@ def send_sandbox(path, dest_path):
 def video_frame(source, crop=False):
     # Convert a video to frame images
     path = pathlib.Path(source)
-    frame_dir = path.parents[1] / "frames"
-    if not frame_dir.is_dir():
-        frame_dir.mkdir()
-    dire = frame_dir / path.stem
-    dir_structure(str(dire))
+    dir_structure(path, ["frames"])
+    sub_dir = path.parents[0] / "frames" / path.stem
     vidcap = cv.VideoCapture(source)
     success, image = vidcap.read()
     count = 0
@@ -108,7 +112,7 @@ def video_frame(source, crop=False):
         image = remove_text(gray_frame)
         if (crop is True):
             image = image[75:500, 75:500]
-        cv.imwrite(str(dire)+"/frame%03d.png" % count, image)
+        cv.imwrite(str(sub_dir)+"/frame%03d.png" % count, image)
         success, image = vidcap.read()
         count += 1
     print("Finished:", source)
@@ -126,7 +130,9 @@ def cryptometry(source):
     # loop, print results and create/update a file with measurements; TODO 2)
     # Get a list of images in a source and make the measurements with all of
     # them
-
+    path = pathlib.Path(source)
+    dir_structure(path, ["figs", "plots"])
+    sys.exit()
     # nome final tem de ter relação com o nome da imagem, nao sobreescrever
     print("Initialize cryptometry")
     image = cv.imread(source)
@@ -252,8 +258,6 @@ def main():
     #     stitch_stack(source)
     elif (function == "cryptometry"):
         cryptometry(source)
-    elif (function == "dir_structure"):
-        dir_structure(source)
     else:
         print("Undefined function")
 
