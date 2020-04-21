@@ -126,10 +126,6 @@ def remove_text(image):
 
 
 def cryptometry(source):
-    # TODO 1) Create an array with the names of functions and call them in a FOR
-    # loop, print results and create/update a file with measurements; TODO 2)
-    # Get a list of images in a source and make the measurements with all of
-    # them
     path = pathlib.Path(source)
     dir_list = ["fig", "plot"]
     dir_structure(path, dir_list)
@@ -138,17 +134,66 @@ def cryptometry(source):
     cryptometry = []
     cryptometry.append(axis_ratio(image.copy()))
     cryptometry.append(perimeter(image.copy()))
-    print("\nParameters\t MEAN\t STD")
-    print("Ma/ma ratio\t %.2f\t %.2f" %
+    cryptometry.append(mean_distance(image.copy()))
+    print("\nParameters\t\t MEAN\t\t STD")
+    print("Axis ratio\t\t %.2f\t\t %.2f" %
           (cryptometry[0][0], cryptometry[0][1]))
-    print("Perimeter(px)\t %.2f\t %.2f" %
+    print("Perimeter(px)\t\t %.2f\t %.2f" %
           (cryptometry[1][0], cryptometry[1][1]))
-    print("Sphericity(%%)\t %.2f\t %.2f" %
+    print("Sphericity(%%)\t\t %.2f\t\t %.2f" %
           (cryptometry[1][2], cryptometry[1][3]))
+    print("Mean distance(px)\t %.2f\t\t %.2f" %
+          (cryptometry[2][0], cryptometry[2][1]))
+    print("Min  distance(px)\t %.2f\t\t %.2f" %
+          (cryptometry[2][2], cryptometry[2][3]))
     print("\nFinished cryptometry")
     for sub_dir in dir_list:
         subprocess.run("mv -vn *"+sub_dir+".png "+str(path.parents[0] / sub_dir / path.stem),
                        shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+
+
+def mean_distance(image):
+    gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+    thresh = cv.threshold(
+        gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)[1]
+    kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))
+    # TODO 1) Improve parameters to get a more precise crypt sizes
+    dilate = cv.dilate(thresh, kernel, iterations=10)
+    erosion = cv.erode(dilate, kernel, iterations=10)
+    contours, hierarchy = cv.findContours(
+        erosion, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
+    num_crypts = 0
+    center_list = []
+    for cont in contours:
+        area = cv.contourArea(cont)
+        if area > 10000 and area < 310000:
+            M = cv.moments(cont)
+            coord = (int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]))
+            center_list.append(coord)
+            cv.circle(image,  (coord), 7, (0, 0, 255), -1)
+            num_crypts += 1
+    count = 1
+    mean_dist_list = []
+    min_dist_list = []
+    MAX_DIST = 735
+    for first_point in center_list:
+        min_dist = MAX_DIST
+        for second_point in center_list[count:]:
+            distance = np.sqrt(
+                np.sum((np.subtract(first_point, second_point))**2))
+            if distance < MAX_DIST:
+                if distance < min_dist:
+                    min_dist = distance
+                cv.line(image, first_point, second_point,
+                        (0, 0, 255), thickness=3)
+                # print("Ponto %s\t M %s\t D %s" % (count, min_dist, distance))
+                mean_dist_list.append(distance)
+        if min_dist != MAX_DIST:
+            min_dist_list.append(min_dist)
+        count += 1
+    print("Number of crypts assessed:", num_crypts)
+    cv.imwrite("dist_fig.png", image)
+    return np.mean(mean_dist_list), np.std(mean_dist_list), np.mean(min_dist_list), np.std(min_dist_list)
 
 
 def perimeter(image):
@@ -157,7 +202,6 @@ def perimeter(image):
     thresh = cv.threshold(
         gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)[1]
     kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))
-    # TODO 1) Improve parameters to get a more precise crypt sizes
     dilate = cv.dilate(thresh, kernel, iterations=10)
     erosion = cv.erode(dilate, kernel, iterations=10)
     contours, hierarchy = cv.findContours(
