@@ -45,6 +45,7 @@ import argparse
 import subprocess
 import pathlib
 import sys
+import math
 
 
 def dir_structure(path, dir_list):
@@ -132,24 +133,104 @@ def cryptometry(source):
     print("Initialize cryptometry")
     image = cv.imread(source)
     cryptometry = []
-    cryptometry.append(axis_ratio(image.copy()))
-    cryptometry.append(perimeter(image.copy()))
-    cryptometry.append(mean_distance(image.copy()))
-    print("\nParameters\t\t MEAN\t\t STD")
-    print("Axis ratio\t\t %.2f\t\t %.2f" %
-          (cryptometry[0][0], cryptometry[0][1]))
-    print("Perimeter(px)\t\t %.2f\t %.2f" %
-          (cryptometry[1][0], cryptometry[1][1]))
-    print("Sphericity(%%)\t\t %.2f\t\t %.2f" %
-          (cryptometry[1][2], cryptometry[1][3]))
-    print("Mean distance(px)\t %.2f\t\t %.2f" %
-          (cryptometry[2][0], cryptometry[2][1]))
-    print("Min  distance(px)\t %.2f\t\t %.2f" %
-          (cryptometry[2][2], cryptometry[2][3]))
+    # cryptometry.append(axis_ratio(image.copy()))
+    # cryptometry.append(perimeter(image.copy()))
+    # cryptometry.append(mean_distance(image.copy()))
+    cryptometry.append(wall_thickness(image.copy()))
+    # print("\nParameters\t\t MEAN\t\t STD")
+    # print("Axis ratio\t\t %.2f\t\t %.2f" %
+    #       (cryptometry[0][0], cryptometry[0][1]))
+    # print("Perimeter(px)\t\t %.2f\t %.2f" %
+    #       (cryptometry[1][0], cryptometry[1][1]))
+    # print("Sphericity(%%)\t\t %.2f\t\t %.2f" %
+    #       (cryptometry[1][2], cryptometry[1][3]))
+    # print("Mean distance(px)\t %.2f\t\t %.2f" %
+    #       (cryptometry[2][0], cryptometry[2][1]))
+    # print("Min  distance(px)\t %.2f\t\t %.2f" %
+    #       (cryptometry[2][2], cryptometry[2][3]))
     print("\nFinished cryptometry")
     for sub_dir in dir_list:
         subprocess.run("mv -vn *"+sub_dir+".png "+str(path.parents[0] / sub_dir / path.stem),
                        shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+
+
+def wall_thickness(image):
+    gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+    thresh = cv.threshold(
+        gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)[1]
+    kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))
+    dilate = cv.dilate(thresh, kernel, iterations=10)
+    erosion = cv.erode(dilate, kernel, iterations=10)
+    contours, hierarchy = cv.findContours(
+        erosion, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
+    num_crypts = 0
+    center_list = []
+    boundary_list = []
+    saved_contours = []
+    for cont in contours:
+        area = cv.contourArea(cont)
+        if area > 10000 and area < 310000:
+            M = cv.moments(cont)
+            coord = (int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]))
+            center_list.append(coord)
+            cimg = np.zeros_like(gray)
+            cv.drawContours(cimg, cont, -1, (255, 255, 255), 1)
+            pts = np.where(cimg == 255)
+            boundary_list.append(pts)
+            saved_contours.append(cont)
+            num_crypts += 1
+    count = 1
+    wall_list = []
+    MAX_DIST = 735
+    for first_point in center_list:
+        min_dist = MAX_DIST
+        for second_point in center_list[count:]:
+            dist = distance(first_point, second_point)
+            if dist < MAX_DIST:
+                slope = ((second_point[1] - first_point[1]) /
+                         (second_point[0] - first_point[0]))
+                cimg = np.zeros_like(gray)
+                cv.drawContours(
+                    cimg, saved_contours[count-1], -1, (255, 255, 255), 1)
+                cv.drawContours(
+                    cimg, saved_contours[count], -1, (255, 255, 255), 1)
+                cv.line(cimg, first_point, second_point,
+                        (255, 255, 255), thickness=1)
+                for coord in range(0, len(boundary_list[count-1][0])):
+                    point = (boundary_list[count-1][1][coord],
+                             boundary_list[count-1][0][coord])
+                    if collinear(slope, first_point, point, slope):
+                        if between_points(first_point, second_point, point, slope):
+                            # talvez possa dar break aqui
+                            cv.circle(cimg,  point, 3, (255, 255, 255), -1)
+                for coord in range(0, len(boundary_list[count][0])):
+                    point = (boundary_list[count][1][coord],
+                             boundary_list[count][0][coord])
+                    if collinear(slope, first_point, point, slope):
+                        if between_points(first_point, second_point, point, slope):
+                            # talvez possa dar break aqui
+                            cv.circle(cimg,  point, 3, (255, 255, 255), -1)
+                cv.imwrite("wall.png", cimg)
+                sys.exit()
+                if dist < min_dist:
+                    min_dist = dist
+
+
+def between_points(first_point, second_point, mid_point, epsilon):
+    return math.isclose((distance(first_point, mid_point)+distance(mid_point, second_point)), distance(first_point, second_point), abs_tol=epsilon)
+
+
+def collinear(slope, first_point, collinear_point, epsilon):
+    equation = ((slope*collinear_point[0]) -
+                (slope*first_point[0]))+first_point[1]
+    if math.isclose(equation, collinear_point[1], abs_tol=epsilon):
+        return True
+    return False
+
+
+def distance(first_point, second_point):
+    return np.sqrt(
+        np.sum((np.subtract(first_point, second_point))**2))
 
 
 def mean_distance(image):
@@ -157,7 +238,6 @@ def mean_distance(image):
     thresh = cv.threshold(
         gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)[1]
     kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))
-    # TODO 1) Improve parameters to get a more precise crypt sizes
     dilate = cv.dilate(thresh, kernel, iterations=10)
     erosion = cv.erode(dilate, kernel, iterations=10)
     contours, hierarchy = cv.findContours(
@@ -179,15 +259,14 @@ def mean_distance(image):
     for first_point in center_list:
         min_dist = MAX_DIST
         for second_point in center_list[count:]:
-            distance = np.sqrt(
-                np.sum((np.subtract(first_point, second_point))**2))
-            if distance < MAX_DIST:
-                if distance < min_dist:
-                    min_dist = distance
+            dist = distance(first_point, second_point)
+            if dist < MAX_DIST:
+                if dist < min_dist:
+                    min_dist = dist
                 cv.line(image, first_point, second_point,
                         (0, 0, 255), thickness=3)
-                # print("Ponto %s\t M %s\t D %s" % (count, min_dist, distance))
-                mean_dist_list.append(distance)
+                # print("Ponto %s\t M %s\t D %s" % (count, min_dist, dist))
+                mean_dist_list.append(dist)
         if min_dist != MAX_DIST:
             min_dist_list.append(min_dist)
         count += 1
