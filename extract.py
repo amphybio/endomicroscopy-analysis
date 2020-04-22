@@ -133,21 +133,23 @@ def cryptometry(source):
     print("Initialize cryptometry")
     image = cv.imread(source)
     cryptometry = []
-    # cryptometry.append(axis_ratio(image.copy()))
-    # cryptometry.append(perimeter(image.copy()))
-    # cryptometry.append(mean_distance(image.copy()))
+    cryptometry.append(axis_ratio(image.copy()))
+    cryptometry.append(perimeter(image.copy()))
+    cryptometry.append(mean_distance(image.copy()))
     cryptometry.append(wall_thickness(image.copy()))
-    # print("\nParameters\t\t MEAN\t\t STD")
-    # print("Axis ratio\t\t %.2f\t\t %.2f" %
-    #       (cryptometry[0][0], cryptometry[0][1]))
-    # print("Perimeter(px)\t\t %.2f\t %.2f" %
-    #       (cryptometry[1][0], cryptometry[1][1]))
-    # print("Sphericity(%%)\t\t %.2f\t\t %.2f" %
-    #       (cryptometry[1][2], cryptometry[1][3]))
-    # print("Mean distance(px)\t %.2f\t\t %.2f" %
-    #       (cryptometry[2][0], cryptometry[2][1]))
-    # print("Min  distance(px)\t %.2f\t\t %.2f" %
-    #       (cryptometry[2][2], cryptometry[2][3]))
+    print("\nParameters\t\t MEAN\t\t STD")
+    print("Axis ratio\t\t %.2f\t\t %.2f" %
+          (cryptometry[0][0], cryptometry[0][1]))
+    print("Perimeter(px)\t\t %.2f\t %.2f" %
+          (cryptometry[1][0], cryptometry[1][1]))
+    print("Sphericity(%%)\t\t %.2f\t\t %.2f" %
+          (cryptometry[1][2], cryptometry[1][3]))
+    print("Mean distance(px)\t %.2f\t\t %.2f" %
+          (cryptometry[2][0], cryptometry[2][1]))
+    print("Min  distance(px)\t %.2f\t\t %.2f" %
+          (cryptometry[2][2], cryptometry[2][3]))
+    print("Wall Thickness(px)\t %.2f\t\t %.2f" %
+          (cryptometry[3][0], cryptometry[3][1]))
     print("\nFinished cryptometry")
     for sub_dir in dir_list:
         subprocess.run("mv -vn *"+sub_dir+".png "+str(path.parents[0] / sub_dir / path.stem),
@@ -155,6 +157,7 @@ def cryptometry(source):
 
 
 def wall_thickness(image):
+    # Executando para os N primeiros vizinhos
     gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
     thresh = cv.threshold(
         gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)[1]
@@ -179,51 +182,57 @@ def wall_thickness(image):
             boundary_list.append(pts)
             saved_contours.append(cont)
             num_crypts += 1
-    count = 1
     wall_list = []
     MAX_DIST = 735
-    for first_point in center_list:
+    for fir_index, first_point in enumerate(center_list):
         min_dist = MAX_DIST
-        for second_point in center_list[count:]:
+        for sec_index, second_point in enumerate(center_list[fir_index+1:]):
             dist = distance(first_point, second_point)
             if dist < MAX_DIST:
                 slope = ((second_point[1] - first_point[1]) /
                          (second_point[0] - first_point[0]))
-                cimg = np.zeros_like(gray)
-                cv.drawContours(
-                    cimg, saved_contours[count-1], -1, (255, 255, 255), 1)
-                cv.drawContours(
-                    cimg, saved_contours[count], -1, (255, 255, 255), 1)
-                cv.line(cimg, first_point, second_point,
-                        (255, 255, 255), thickness=1)
-                for coord in range(0, len(boundary_list[count-1][0])):
-                    point = (boundary_list[count-1][1][coord],
-                             boundary_list[count-1][0][coord])
-                    if collinear(slope, first_point, point, slope):
+                first_wall = []
+                second_wall = []
+                for coord in range(0, len(boundary_list[fir_index][0])):
+                    point = (boundary_list[fir_index][1][coord],
+                             boundary_list[fir_index][0][coord])
+                    if collinear(slope, first_point, point):
                         if between_points(first_point, second_point, point, slope):
-                            # talvez possa dar break aqui
-                            cv.circle(cimg,  point, 3, (255, 255, 255), -1)
+                            first_wall.append(point)
+                count = fir_index + 1 + sec_index
                 for coord in range(0, len(boundary_list[count][0])):
                     point = (boundary_list[count][1][coord],
                              boundary_list[count][0][coord])
-                    if collinear(slope, first_point, point, slope):
+                    if collinear(slope, first_point, point):
                         if between_points(first_point, second_point, point, slope):
-                            # talvez possa dar break aqui
-                            cv.circle(cimg,  point, 3, (255, 255, 255), -1)
-                cv.imwrite("wall.png", cimg)
-                sys.exit()
-                if dist < min_dist:
-                    min_dist = dist
+                            second_wall.append(point)
+                minA = []
+                minB = []
+                min_wall = MAX_DIST
+                for pointA in first_wall:
+                    min_wall = MAX_DIST
+                    for pointB in second_wall:
+                        dist = distance(pointA, pointB)
+                        if dist < min_dist:
+                            min_wall = dist
+                            minA.append(pointA)
+                            minB.append(pointB)
+                wall_list.append(min_wall)
+                cv.circle(image,  minA[0], 7, (0, 0, 255), -1)
+                cv.circle(image,  minB[0], 7, (0, 0, 255), -1)
+                cv.line(image, minA[0], minB[0], (0, 0, 255), 3)
+    cv.imwrite("wall_fig.png", image)
+    return np.mean(wall_list), np.std(wall_list)
 
 
 def between_points(first_point, second_point, mid_point, epsilon):
-    return math.isclose((distance(first_point, mid_point)+distance(mid_point, second_point)), distance(first_point, second_point), abs_tol=epsilon)
+    return math.isclose((distance(first_point, mid_point)+distance(mid_point, second_point)), distance(first_point, second_point), abs_tol=abs(epsilon))
 
 
-def collinear(slope, first_point, collinear_point, epsilon):
+def collinear(slope, first_point, collinear_point):
     equation = ((slope*collinear_point[0]) -
                 (slope*first_point[0]))+first_point[1]
-    if math.isclose(equation, collinear_point[1], abs_tol=epsilon):
+    if math.isclose(equation, collinear_point[1], abs_tol=(abs(slope))+1):
         return True
     return False
 
