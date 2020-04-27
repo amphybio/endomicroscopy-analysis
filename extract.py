@@ -143,9 +143,11 @@ def segmentation(image):
     contours_list, hierarchy = cv.findContours(
         processed_image, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
     crypts_list = []
+    MIN_AREA = 10000
+    MAX_AREA = 310000
     for countour in contours_list:
         area = cv.contourArea(countour)
-        if area > 10000 and area < 310000:
+        if area > MIN_AREA and area < MAX_AREA:
             crypts_list.append(countour)
     print("Number of crypts assessed:", len(crypts_list))
     return crypts_list
@@ -206,10 +208,10 @@ def wall_thickness(image, crypts_list):
                     if collinear(slope, first_point, point):
                         if between_points(slope, first_point, second_point, point):
                             second_wall.append(point)
-                min_wall = MAX_DIST
                 minA = [1]
                 minB = [1]
                 for pointA in first_wall:
+                    min_wall = MAX_DIST
                     for pointB in second_wall:
                         dist = distance(pointA, pointB)
                         if dist < min_wall:
@@ -217,7 +219,6 @@ def wall_thickness(image, crypts_list):
                             minA[0] = pointA
                             minB[0] = pointB
                     wall_list.append(min_wall)
-                    min_wall = MAX_DIST
                 cv.circle(image,  tuple(minA[0]), 7, (0, 0, 255), -1)
                 cv.circle(image,  tuple(minB[0]), 7, (0, 0, 255), -1)
                 cv.line(image, tuple(minA[0]), tuple(minB[0]), (0, 0, 255), 3)
