@@ -221,7 +221,7 @@ def maximal_feret(image, crypts_list):
         max_pointB = [0]
         for index, pointA in enumerate(crypt):
             pointA = pointA[0]
-            for pointB in crypt[index:]:
+            for pointB in crypt[index+1:]:
                 pointB = pointB[0]
                 dist = distance(pointA, pointB)
                 if dist > max_dist:
