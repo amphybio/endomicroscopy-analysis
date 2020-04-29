@@ -46,6 +46,7 @@ import subprocess
 import pathlib
 import sys
 import math
+from timeit import default_timer as timer
 
 
 def dir_structure(path, dir_list):
@@ -160,28 +161,91 @@ def cryptometry(source):
     print("Initialize cryptometry")
     image = cv.imread(source)
     crypts_list = segmentation(image.copy())
-    cryptometry = []
-    cryptometry.append(axis_ratio(image.copy(), crypts_list))
-    cryptometry.extend(perimeter(image.copy(), crypts_list))
-    cryptometry.extend(mean_distance(image.copy(), crypts_list))
-    cryptometry.append(wall_thickness(image.copy(), crypts_list))
+    draw_countours(image, crypts_list)
+    crypts_measures = []
+    crypts_measures.append(axis_ratio(image.copy(), crypts_list))
+    crypts_measures.extend(perimeter(image.copy(), crypts_list))
+    crypts_measures.extend(mean_distance(image.copy(), crypts_list))
+    crypts_measures.append(wall_thickness(image.copy(), crypts_list))
+    crypts_measures.append(maximal_feret(image.copy(), crypts_list))
     print("\nParameters\t\t MEAN\t\t STD")
     print("Axis ratio\t\t %.2f\t\t %.2f" %
-          (cryptometry[0][0], cryptometry[0][1]))
+          (crypts_measures[0][0], crypts_measures[0][1]))
     print("Perimeter(px)\t\t %.2f\t %.2f" %
-          (cryptometry[1][0], cryptometry[1][1]))
+          (crypts_measures[1][0], crypts_measures[1][1]))
     print("Sphericity(%%)\t\t %.2f\t\t %.2f" %
-          (cryptometry[2][0], cryptometry[2][1]))
+          (crypts_measures[2][0], crypts_measures[2][1]))
     print("Mean distance(px)\t %.2f\t\t %.2f" %
-          (cryptometry[3][0], cryptometry[3][1]))
+          (crypts_measures[3][0], crypts_measures[3][1]))
     print("Min  distance(px)\t %.2f\t\t %.2f" %
-          (cryptometry[4][0], cryptometry[4][1]))
+          (crypts_measures[4][0], crypts_measures[4][1]))
     print("Wall Thickness(px)\t %.2f\t\t %.2f" %
-          (cryptometry[5][0], cryptometry[5][1]))
+          (crypts_measures[5][0], crypts_measures[5][1]))
+    print("Max Feret(px)\t\t %.2f\t\t %.2f" %
+          (crypts_measures[6][0], crypts_measures[6][1]))
     print("\nFinished cryptometry")
     for sub_dir in dir_list:
         subprocess.run("mv -vn *"+sub_dir+".png "+str(path.parents[0] / sub_dir / path.stem),
                        shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+
+
+def maximal_feret(image, crypts_list):
+    feret_diameters = []
+    # HEURISTICA
+    start = timer()
+    for crypt in crypts_list:
+        left = tuple(crypt[crypt[:, :, 0].argmin()][0])
+        right = tuple(crypt[crypt[:, :, 0].argmax()][0])
+        top = tuple(crypt[crypt[:, :, 1].argmin()][0])
+        bottom = tuple(crypt[crypt[:, :, 1].argmax()][0])
+        y_distance = distance(top, bottom)
+        x_distance = distance(left, right)
+        if x_distance > y_distance:
+            cv.circle(image, left, 7, (0, 255, 255), -1)
+            cv.circle(image, right, 7, (0, 255, 255), -1)
+            cv.line(image, left, right, (0, 255, 255), thickness=3)
+            feret_diameters.append(x_distance)
+        else:
+            cv.circle(image, top, 7, (0, 255, 255), -1)
+            cv.circle(image, bottom, 7, (0, 255, 255), -1)
+            cv.line(image, top, bottom, (0, 255, 255), thickness=3)
+            feret_diameters.append(y_distance)
+    end = timer()
+    h_time = end - start
+    # BRUTA
+    feret = []
+    start = timer()
+    for crypt in crypts_list:
+        max_dist = 0
+        max_pointA = [0]
+        max_pointB = [0]
+        for index, pointA in enumerate(crypt):
+            pointA = pointA[0]
+            for pointB in crypt[index:]:
+                pointB = pointB[0]
+                dist = distance(pointA, pointB)
+                if dist > max_dist:
+                    max_dist = dist
+                    max_pointA[0] = pointA
+                    max_pointB[0] = pointB
+        cv.circle(image, tuple(max_pointA[0]), 7, (0, 255, 0), -1)
+        cv.circle(image, tuple(max_pointB[0]), 7, (0, 255, 0), -1)
+        cv.line(image, tuple(max_pointA[0]), tuple(
+            max_pointB[0]), (0, 255, 0), thickness=3)
+        feret.append(max_dist)
+    end = timer()
+    b_time = end - start
+    for i in range(0, len(feret)):
+        print("%s H:%.2f \t B:%.2f \t D:%.2f" %
+              (i, feret_diameters[i], feret[i], abs(feret_diameters[i]-feret[i])))
+    print("MEAN H:%.2f \t B:%.2f \t DIF:%.2f" % (np.mean(feret_diameters),
+                                                 np.mean(feret), abs(np.mean(feret_diameters)-np.mean(feret))))
+    print("STD H:%.2f \t B:%.2f \t DIF:%.2f" % (np.std(feret_diameters),
+                                                np.std(feret), abs(np.std(feret_diameters)-np.std(feret))))
+    print("TIME H:%.2fs \t B:%.2fs \t DIF:%2.f" %
+          (h_time, b_time, abs(h_time-b_time)))  # 35~40s
+    cv.imwrite("feret_fig.png", image)
+    return np.mean(feret_diameters), np.std(feret_diameters)
 
 
 def wall_thickness(image, crypts_list):
@@ -284,7 +348,6 @@ def perimeter(image, crypts_list):
         # epsilon = 0.007 * cv.arcLength(cont, True)
         # approx = cv.approxPolyDP(cont, epsilon, True)
         # cv.drawContours(image, [approx], -1, (0, 255, 0), 3)
-        cv.drawContours(image, crypt, -1, (0, 0, 255), 3)
     cv.imwrite("perim_fig.png", image)
     return [np.mean(perim_list), np.std(perim_list)], [np.mean(spher_list)*100, np.std(spher_list)*100]
 
@@ -304,6 +367,10 @@ def axis_ratio(image, crypts_list):
     cv.imwrite("axisr_fig.png", image)
     return np.mean(mama_list), np.std(mama_list)
 
+
+def draw_countours(image, crypts_list):
+    for crypt in crypts_list:
+        cv.drawContours(image, crypt, -1, (0, 0, 255), 3)
 
 # def stitch_stack(source):
 #     # Stitch frame images to do a mosaic
