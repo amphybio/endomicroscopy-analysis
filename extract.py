@@ -63,8 +63,8 @@ def dir_structure(path, dir_list):
 def dir_exists(path):
     if path.is_dir():
         option = input(
-            "Path %s already exists! Want to send to sandbox? (y/n) Caution:"
-            " to press n will overwrite directory\n" % str(path))
+            " Path %s already exists! Want to send to sandbox? (y/n)" 
+            " *Caution!* To press n will overwrite directory\n" % str(path))
         if option == "y":
             if "main" in str(path):
                 hierarchy = path.parts
