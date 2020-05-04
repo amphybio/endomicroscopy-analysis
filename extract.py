@@ -33,20 +33,71 @@
 # =============================================================================
 
 # USAGE
-# python extract.py -f video_frame -p midia/016-2017.mp4
-# python extract.py -f video_frame_crop -p midia/016-2017.mp4
-# python extract.py -f stitch -p midia/016-2017
-# python extract.py -f stitch -p midia/tres
-# python extract.py -f cryptometry -p midia/stitch100.tif
-# python extract.py -f cryptometry -p midia/stitch300.tif
+# python extract.py -f video_frame -p midia/main/1234/016-2017.mp4
+# python extract.py -f video_frame_crop -p midia/main/1234/016-2017.mp4
+# python extract.py -f stitch -p midia/main/1234/frame/016-2017
+# python extract.py -f cryptometry -p midia/main/1234/stitch100.tif
 
 
 import cv2 as cv
 import numpy as np
 import argparse
-import os
+import subprocess
+import pathlib
 import sys
-import shutil
+import math
+
+
+def dir_structure(path, dir_list):
+    for dire in dir_list:
+        path_dir = path.parents[0] / dire
+        if not path_dir.is_dir():
+            path_dir.mkdir()
+        sub_dir = path_dir / path.stem
+        dir_exists(sub_dir)
+        sub_dir.mkdir()
+        print("New directory structure was created! Source: %s" % str(sub_dir))
+
+
+def dir_exists(path):
+    if path.is_dir():
+        option = input(
+            "Path %s already exists! Want to send to sandbox? (y/n) Caution:"
+            " to press n will overwrite directory\n" % str(path))
+        if option == "y":
+            if "main" in str(path):
+                hierarchy = path.parts
+                main_index = hierarchy.index("main")
+                path_index = len(hierarchy)-(2 + max(0, main_index-1))
+                print("Directory was sent to sandbox! Code: %s" %
+                      send_sandbox(path, (path.parents[path_index] / "sandbox" / hierarchy[main_index+1])))
+            else:
+                print("Directory 'main' not found! Exiting...")
+                sys.exit()
+        elif option == "n":
+            subprocess.run("rm -rf "+str(path.resolve()), shell=True,
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+            print("Directory %s was deleted!" % str(path))
+        else:
+            print("Option unavailable! Exiting...")
+            sys.exit()
+
+
+def send_sandbox(path, dest_path):
+    if not dest_path.is_dir():
+        dest_path.mkdir()
+    count = subprocess.run("find . -maxdepth 1 -type f | wc -l", cwd=dest_path,
+                           shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+    key_sand = '{:04d}'.format(int(count.stdout))
+    subprocess.run("zip -r "+key_sand+".zip "+str(path),
+                   shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+    subprocess.run("rm -rf "+str(path.resolve()),
+                   shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+    mv = subprocess.run("mv -vn "+key_sand+".zip "+str(dest_path.resolve()),
+                        shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+    if (mv.stdout == ''):
+        print("Error to move: destination path already exists!")
+    return key_sand
 
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -60,37 +111,21 @@ sns.set_palette(palette='bright')
 
 def video_frame(source, crop=False):
     # Convert a video to frame images
+    path = pathlib.Path(source)
+    dir_structure(path, ["frame"])
+    sub_dir = path.parents[0] / "frame" / path.stem
     vidcap = cv.VideoCapture(source)
     success, image = vidcap.read()
     count = 0
-    path = os.path.splitext(source)[0]
-    is_dir(path)
-    os.mkdir(path)
     while success:
         gray_frame = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
         image = remove_text(gray_frame)
-        if (crop is True):
+        if crop is True:
             image = image[75:500, 75:500]
-        cv.imwrite(path+"/frame%03d.png" % count, image)
+        cv.imwrite(str(sub_dir)+"/frame%03d.png" % count, image)
         success, image = vidcap.read()
         count += 1
-    file = os.path.basename(source)
-    print('Finished ', file)
-
-
-def is_dir(source):
-    # Verify if a path is a directory and if it already exists
-    isdir = os.path.isdir(source)
-    if (isdir):
-        option = input(
-            "Path "+source+" already exists! Want to Overwrite or save Backup? (o/b)\n")
-        if (option == "o"):
-            shutil.rmtree(source)
-            print("Directory overwrited!")
-        else:
-            is_dir(source+".BKP")
-            os.rename(source, source+'.BKP')
-            print("Backup complete! Backup path: ", source+'.BKP')
+    print("Finished:", source)
 
 
 def remove_text(image):
@@ -101,40 +136,173 @@ def remove_text(image):
 
 
 def cryptometry(source):
-    # TODO 1) Create an array with the names of functions and call them in a FOR
-    # loop, print results and create/update a file with measurements; TODO 2)
-    # Get a list of images in a source and make the measurements with all of
-    # them
+    path = pathlib.Path(source)
+    dir_list = ["fig", "plot"]
+    dir_structure(path, dir_list)
     print("Initialize cryptometry")
     image = cv.imread(source)
     cryptometry = []
-    cryptometry.append(mama_ratio(image.copy()))
+    cryptometry.append(axis_ratio(image.copy()))
     cryptometry.append(perimeter(image.copy()))
-    print("\nParameters\t MEAN\t STD")
-    print("Ma/ma ratio\t %.2f\t %.2f" %
+    cryptometry.append(mean_distance(image.copy()))
+    cryptometry.append(wall_thickness(image.copy()))
+    print("\nParameters\t\t MEAN\t\t STD")
+    print("Axis ratio\t\t %.2f\t\t %.2f" %
           (cryptometry[0][0], cryptometry[0][1]))
-    print("Perimeter(um)\t %.2f\t %.2f" %
+    print("Perimeter(um)\t\t %.2f\t %.2f" %
           (cryptometry[1][0], cryptometry[1][1]))
-    print("Sphericity(%%)\t %.2f\t %.2f" %
+    print("Sphericity(%%)\t\t %.2f\t\t %.2f" %
           (cryptometry[1][2], cryptometry[1][3]))
+    print("Mean distance(px)\t %.2f\t\t %.2f" %
+          (cryptometry[2][0], cryptometry[2][1]))
+    print("Min  distance(px)\t %.2f\t\t %.2f" %
+          (cryptometry[2][2], cryptometry[2][3]))
+    print("Wall Thickness(px)\t %.2f\t\t %.2f" %
+          (cryptometry[3][0], cryptometry[3][1]))
     print("\nFinished cryptometry")
+    for sub_dir in dir_list:
+        subprocess.run("mv -vn *"+sub_dir+".png "+str(path.parents[0] / sub_dir / path.stem),
+                       shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+
+
+def wall_thickness(image):
+    # Executando para os N primeiros vizinhos
+    gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+    thresh = cv.threshold(
+        gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)[1]
+    kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))
+    dilate = cv.dilate(thresh, kernel, iterations=10)
+    erosion = cv.erode(dilate, kernel, iterations=10)
+    contours, hierarchy = cv.findContours(
+        erosion, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
+    num_crypts = 0
+    center_list = []
+    boundary_list = []
+    saved_contours = []
+    for cont in contours:
+        area = cv.contourArea(cont)
+        if area > 10000 and area < 310000:
+            M = cv.moments(cont)
+            coord = (int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]))
+            center_list.append(coord)
+            cimg = np.zeros_like(gray)
+            cv.drawContours(cimg, cont, -1, (255, 255, 255), 1)
+            pts = np.where(cimg == 255)
+            boundary_list.append(pts)
+            saved_contours.append(cont)
+            num_crypts += 1
+    wall_list = []
+    MAX_DIST = 735
+    for fir_index, first_point in enumerate(center_list):
+        min_dist = MAX_DIST
+        for sec_index, second_point in enumerate(center_list[fir_index+1:]):
+            dist = distance(first_point, second_point)
+            if dist < MAX_DIST:
+                slope = ((second_point[1] - first_point[1]) /
+                         (second_point[0] - first_point[0]))
+                first_wall = []
+                second_wall = []
+                for coord in range(0, len(boundary_list[fir_index][0])):
+                    point = (boundary_list[fir_index][1][coord],
+                             boundary_list[fir_index][0][coord])
+                    if collinear(slope, first_point, point):
+                        if between_points(first_point, second_point, point, slope):
+                            first_wall.append(point)
+                count = fir_index + 1 + sec_index
+                for coord in range(0, len(boundary_list[count][0])):
+                    point = (boundary_list[count][1][coord],
+                             boundary_list[count][0][coord])
+                    if collinear(slope, first_point, point):
+                        if between_points(first_point, second_point, point, slope):
+                            second_wall.append(point)
+                minA = []
+                minB = []
+                min_wall = MAX_DIST
+                for pointA in first_wall:
+                    min_wall = MAX_DIST
+                    for pointB in second_wall:
+                        dist = distance(pointA, pointB)
+                        if dist < min_dist:
+                            min_wall = dist
+                            minA.append(pointA)
+                            minB.append(pointB)
+                wall_list.append(min_wall)
+                cv.circle(image,  minA[0], 7, (0, 0, 255), -1)
+                cv.circle(image,  minB[0], 7, (0, 0, 255), -1)
+                cv.line(image, minA[0], minB[0], (0, 0, 255), 3)
+    cv.imwrite("wall_fig.png", image)
+    return np.mean(wall_list), np.std(wall_list)
+
+
+def between_points(first_point, second_point, mid_point, epsilon):
+    return math.isclose((distance(first_point, mid_point)+distance(mid_point, second_point)), distance(first_point, second_point), abs_tol=abs(epsilon))
+
+
+def collinear(slope, first_point, collinear_point):
+    equation = ((slope*collinear_point[0]) -
+                (slope*first_point[0]))+first_point[1]
+    if math.isclose(equation, collinear_point[1], abs_tol=(abs(slope))+1):
+        return True
+    return False
+
+
+def distance(first_point, second_point):
+    return np.sqrt(
+        np.sum((np.subtract(first_point, second_point))**2))
+
+
+def mean_distance(image):
+    gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+    thresh = cv.threshold(
+        gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)[1]
+    kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))
+    dilate = cv.dilate(thresh, kernel, iterations=10)
+    erosion = cv.erode(dilate, kernel, iterations=10)
+    contours, hierarchy = cv.findContours(
+        erosion, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
+    num_crypts = 0
+    center_list = []
+    for cont in contours:
+        area = cv.contourArea(cont)
+        if area > 10000 and area < 310000:
+            M = cv.moments(cont)
+            coord = (int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]))
+            center_list.append(coord)
+            cv.circle(image,  (coord), 7, (0, 0, 255), -1)
+            num_crypts += 1
+    count = 1
+    mean_dist_list = []
+    min_dist_list = []
+    MAX_DIST = 735
+    for first_point in center_list:
+        min_dist = MAX_DIST
+        for second_point in center_list[count:]:
+            dist = distance(first_point, second_point)
+            if dist < MAX_DIST:
+                if dist < min_dist:
+                    min_dist = dist
+                cv.line(image, first_point, second_point,
+                        (0, 0, 255), thickness=3)
+                # print("Ponto %s\t M %s\t D %s" % (count, min_dist, dist))
+                mean_dist_list.append(dist)
+        if min_dist != MAX_DIST:
+            min_dist_list.append(min_dist)
+        count += 1
+    print("Number of crypts assessed:", num_crypts)
+    cv.imwrite("dist_fig.png", image)
+    return np.mean(mean_dist_list), np.std(mean_dist_list), np.mean(min_dist_list), np.std(min_dist_list)
 
 
 def perimeter(image):
     print("Initialize Perimeter")
     gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
-
     thresh = cv.threshold(
         gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)[1]
-
     kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))
-    # TODO 1) Improve parameters to get a more precise crypt sizes
     dilate = cv.dilate(thresh, kernel, iterations=10)
     erosion = cv.erode(dilate, kernel, iterations=10)
-
     contours, hierarchy = cv.findContours(
         erosion, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
-
     cnt = contours[0]
     num_crypts = 0
     perim_list = []
@@ -151,7 +319,6 @@ def perimeter(image):
                 # approx = cv.approxPolyDP(cont, epsilon, True)
                 # cv.drawContours(image, [approx], -1, (0, 255, 0), 3)
                 cv.drawContours(image, cont, -1, (0, 0, 255), 3)
-
     print("Number of crypts assessed:", num_crypts)
 
     #print(len(perim_list), perim_list)
@@ -192,29 +359,26 @@ def perimeter(image):
     plt.show(distribution)
     plt.clf()
 
-    cv.imwrite("perm.png", image)
+    cv.imwrite("perm_fig.png", image)
+
     return np.mean(perim_list), np.std(perim_list), np.mean(spher_list)*100, np.std(spher_list)*100
 
 
-def mama_ratio(image):
-    # Major axis/minor axis ratio (Ma/ma ratio)
+def axis_ratio(image):
+    # Ratio between major and minor axis (Ma/ma ratio)
     # Give the mean and standard deviation of the ratio between the width and
     # the heigth of the box containing the crypt
-    print("Initialize Major axis/Minor axis ratio")
+    print("Initialize axis ratio")
     gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
     thresh = cv.threshold(
         gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)[1]
-
     kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))
     # TODO 1) Improve parameters to get a more precise crypt sizes
     dilate = cv.dilate(thresh, kernel, iterations=10)
     erosion = cv.erode(dilate, kernel, iterations=10)
-
     aux = erosion
-
     cnts = cv.findContours(aux, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE)
     cnts = cnts[0] if len(cnts) == 2 else cnts[1]
-
     mama_list = []
     num_crypts = 0
     for c in cnts:
@@ -228,7 +392,7 @@ def mama_ratio(image):
                 mama_list.append(heigth/width)
             cv.rectangle(image, (x, y), (x + width, y + heigth),
                          (0, 0, 255), 3)
-    cv.imwrite("mama.png", image)
+    cv.imwrite("axisr_fig.png", image)
     print("Number of crypts assessed:", num_crypts)
 
     # PLOT
@@ -277,21 +441,20 @@ def pixel_micrometer(value_pixel):
     CONST_MICROM = 20
     return (CONST_MICROM * value_pixel) / CONST_PIXEL
 
-
-def stitch_stack(source):
-    # Stitch frame images to do a mosaic
-    list_images = sorted(os.listdir(source))
-    images = []
-    for image_name in list_images:
-        image = cv.imread(source+'/'+image_name)
-        images.append(image)
-        stitcher = cv.Stitcher.create(cv.Stitcher_SCANS)
-        status, pano = stitcher.stitch(images)
-    if status != cv.Stitcher_OK:
-        print("Can't stitch images, error code = %d" % status)
-        sys.exit(-1)
-        cv.imwrite("teste.png", pano)
-        print("stitching completed successfully.")
+# def stitch_stack(source):
+#     # Stitch frame images to do a mosaic
+#     list_images = sorted(os.listdir(source))
+#     images = []
+#     for image_name in list_images:
+#         image = cv.imread(source+'/'+image_name)
+#         images.append(image)
+#         stitcher = cv.Stitcher.create(cv.Stitcher_SCANS)
+#         status, pano = stitcher.stitch(images)
+#     if status != cv.Stitcher_OK:
+#         print("Can't stitch images, error code = %d" % status)
+#         sys.exit(-1)
+#         cv.imwrite("teste.png", pano)
+#         print("stitching completed successfully.")
 
 
 def main():
@@ -309,8 +472,8 @@ def main():
         video_frame(source)
     elif (function == "video_frame_crop"):
         video_frame(source, True)
-    elif (function == "stitch"):
-        stitch_stack(source)
+    # elif (function == "stitch"):
+    #     stitch_stack(source)
     elif (function == "cryptometry"):
         cryptometry(source)
     else:
