@@ -23,7 +23,7 @@
 #                       cryptometry)
 #                  -p PATH, --path PATH
 #                     Input file or directory of images path
-#  REQUIREMENTS:  OpenCV, Python, Numpy
+#  REQUIREMENTS:  OpenCV, Python, Numpy, Seaborn
 #          BUGS:  ---
 #         NOTES:  ---
 #         AUTOR:  Alan U. Sabino <alan.sabino@usp.br>
@@ -99,6 +99,15 @@ def send_sandbox(path, dest_path):
     if (mv.stdout == ''):
         print("Error to move: destination path already exists!")
     return key_sand
+
+import seaborn as sns
+import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
+
+# Define style plots
+sns.set(context='notebook', style='ticks', font='Arial', font_scale=2, rc={
+        'axes.grid': True, 'grid.linestyle': 'dashed', 'lines.linewidth': 2, 'xtick.direction': 'in', 'ytick.direction': 'in', 'figure.figsize': (7, 3.09017)})  # (1.4, 0.618034)
+sns.set_palette(palette='bright')
 
 
 def video_frame(source, crop=False):
@@ -347,9 +356,46 @@ def perimeter(image, crypts_list):
         spher_list.append((4 * np.pi * area) / (perimeter ** 2))
         # epsilon = 0.007 * cv.arcLength(cont, True)
         # approx = cv.approxPolyDP(cont, epsilon, True)
-        # cv.drawContours(image, [approx], -1, (0, 255, 0), 3)
-    cv.imwrite("perim_fig.png", image)
-    return [np.mean(perim_list), np.std(perim_list)], [np.mean(spher_list)*100, np.std(spher_list)*100]
+        # cv.drawContours(image, [approx], -1, (0, 255, 0), 3)  
+    # PLOT
+    data = perim_list
+
+    # BOXPLOT
+    boxplot = sns.boxplot(y=data, width=0.25)
+
+    # TODO manter frequência de linhas de grade e espaçar frequência de números
+    # boxplot.yaxis.set_major_locator(ticker.MultipleLocator(0.05))
+    # boxplot.yaxis.set_major_formatter(ticker.ScalarFormatter())
+
+    fig1 = boxplot.get_figure()
+
+    # plt.title("Crypt axis ratio boxplot")
+    # plt.ylabel("Axis ratio")
+    fig1.savefig("perim_box_plot.png", dpi=300, bbox_inches="tight")
+    # plt.show(boxplot)
+    plt.clf()
+
+    # DISTRIBUTION
+    distribution = sns.distplot(data)  # bin: freedman-diaconis
+
+    # distribution.xaxis.set_major_locator(ticker.MultipleLocator(0.2))
+    # distribution.xaxis.set_major_formatter(ticker.ScalarFormatter())
+
+    # distribution.yaxis.set_major_locator(ticker.MultipleLocator(1))
+    # distribution.yaxis.set_major_formatter(ticker.ScalarFormatter())
+
+    fig2 = distribution.get_figure()
+
+    plt.title("Perimeter distribution")
+    plt.ylabel("Density")
+    plt.xlabel("Perimeter (um)")  # TODO usar simbolo grego
+
+    fig2.savefig("perim_dist_plot.png", dpi=300, bbox_inches="tight")
+    plt.show(distribution)
+    plt.clf()
+
+    cv.imwrite("perm_fig.png", image)
+    return [np.mean(perim_list), np.std(perim_list)], [np.mean(spher_list)*100, np.std(spher_list)*100] 
 
 
 def axis_ratio(image, crypts_list):
@@ -365,8 +411,52 @@ def axis_ratio(image, crypts_list):
             mama_list.append(heigth/width)
         cv.rectangle(image, (x, y), (x + width, y + heigth), (0, 0, 255), 3)
     cv.imwrite("axisr_fig.png", image)
+    # PLOT
+    data = mama_list
+
+    # BOXPLOT
+    boxplot = sns.boxplot(y=data, width=0.25)
+
+    # TODO manter frequência de linhas de grade e espaçar frequência de números
+    boxplot.yaxis.set_major_locator(ticker.MultipleLocator(0.05))
+    boxplot.yaxis.set_major_formatter(ticker.ScalarFormatter())
+
+    fig1 = boxplot.get_figure()
+
+    plt.title("Crypt axis ratio boxplot")
+    plt.ylabel("Axis ratio")
+    fig1.savefig("axis_box_plot.png", dpi=300, bbox_inches="tight")
+    # plt.show(boxplot)
+    plt.clf()
+
+    # DISTRIBUTION
+    distribution = sns.distplot(data)  # bin: freedman-diaconis
+
+    distribution.xaxis.set_major_locator(ticker.MultipleLocator(0.2))
+    distribution.xaxis.set_major_formatter(ticker.ScalarFormatter())
+
+    distribution.yaxis.set_major_locator(ticker.MultipleLocator(1))
+    distribution.yaxis.set_major_formatter(ticker.ScalarFormatter())
+
+    fig2 = distribution.get_figure()
+
+    plt.title("Crypt axis ratio distribution")
+    plt.ylabel("Density")
+    plt.xlabel("Axis ratio")
+
+    fig2.savefig("axis_dist_plot.png", dpi=300, bbox_inches="tight")
+    # plt.show(distribution)
+    plt.clf()
+
     return np.mean(mama_list), np.std(mama_list)
 
+
+def pixel_micrometer(value_pixel):
+    # 51 pixels correspond to 20 micrometers
+    CONST_PIXEL = 51
+    CONST_MICROM = 20
+    return (CONST_MICROM * value_pixel) / CONST_PIXEL
+  
 
 def draw_countours(image, crypts_list):
     for crypt in crypts_list:
