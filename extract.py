@@ -38,7 +38,6 @@
 # python extract.py -f stitch -p midia/main/1234/frame/016-2017
 # python extract.py -f cryptometry -p midia/main/1234/stitch100.tif
 
-
 import cv2 as cv
 import numpy as np
 import argparse
@@ -47,6 +46,13 @@ import pathlib
 import sys
 import math
 from timeit import default_timer as timer
+import seaborn as sns
+import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
+# Define style plots
+sns.set(context='notebook', style='ticks', font='Arial', font_scale=2, rc={
+        'axes.grid': True, 'grid.linestyle': 'dashed', 'lines.linewidth': 2, 'xtick.direction': 'in', 'ytick.direction': 'in', 'figure.figsize': (7, 3.09017)})  # (1.4, 0.618034)
+sns.set_palette(palette='bright')
 
 
 def dir_structure(path, dir_list):
@@ -63,7 +69,7 @@ def dir_structure(path, dir_list):
 def dir_exists(path):
     if path.is_dir():
         option = input(
-            " Path %s already exists! Want to send to sandbox? (y/n)" 
+            " Path %s already exists! Want to send to sandbox? (y/n)"
             " *Caution!* To press n will overwrite directory\n" % str(path))
         if option == "y":
             if "main" in str(path):
@@ -99,15 +105,6 @@ def send_sandbox(path, dest_path):
     if (mv.stdout == ''):
         print("Error to move: destination path already exists!")
     return key_sand
-
-import seaborn as sns
-import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
-
-# Define style plots
-sns.set(context='notebook', style='ticks', font='Arial', font_scale=2, rc={
-        'axes.grid': True, 'grid.linestyle': 'dashed', 'lines.linewidth': 2, 'xtick.direction': 'in', 'ytick.direction': 'in', 'figure.figsize': (7, 3.09017)})  # (1.4, 0.618034)
-sns.set_palette(palette='bright')
 
 
 def video_frame(source, crop=False):
@@ -194,7 +191,7 @@ def cryptometry(source):
           (crypts_measures[6][0], crypts_measures[6][1]))
     print("\nFinished cryptometry")
     for sub_dir in dir_list:
-        subprocess.run("mv -vn *"+sub_dir+".png "+str(path.parents[0] / sub_dir / path.stem),
+        subprocess.run("mv -vn *"+sub_dir+".jpg "+str(path.parents[0] / sub_dir / path.stem),
                        shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
 
 
@@ -253,7 +250,7 @@ def maximal_feret(image, crypts_list):
                                                 np.std(feret), abs(np.std(feret_diameters)-np.std(feret))))
     print("TIME H:%.2fs \t B:%.2fs \t DIF:%2.f" %
           (h_time, b_time, abs(h_time-b_time)))  # 35~40s
-    cv.imwrite("feret_fig.png", image)
+    cv.imwrite("feret_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
     return np.mean(feret_diameters), np.std(feret_diameters)
 
 
@@ -295,7 +292,7 @@ def wall_thickness(image, crypts_list):
                 cv.circle(image,  tuple(minA[0]), 7, (0, 0, 255), -1)
                 cv.circle(image,  tuple(minB[0]), 7, (0, 0, 255), -1)
                 cv.line(image, tuple(minA[0]), tuple(minB[0]), (0, 0, 255), 3)
-    cv.imwrite("wall_fig.png", image)
+    cv.imwrite("wall_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
     return np.mean(wall_list), np.std(wall_list)
 
 
@@ -328,7 +325,7 @@ def mean_distance(image, crypts_list):
                     min_dist = dist
         if min_dist != MAX_DIST:
             min_dist_list.append(min_dist)
-    cv.imwrite("dist_fig.png", image)
+    cv.imwrite("dist_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
     return [np.mean(mean_dist_list), np.std(mean_dist_list)], [np.mean(min_dist_list), np.std(min_dist_list)]
 
 
@@ -356,46 +353,35 @@ def perimeter(image, crypts_list):
         spher_list.append((4 * np.pi * area) / (perimeter ** 2))
         # epsilon = 0.007 * cv.arcLength(cont, True)
         # approx = cv.approxPolyDP(cont, epsilon, True)
-        # cv.drawContours(image, [approx], -1, (0, 255, 0), 3)  
+        # cv.drawContours(image, [approx], -1, (0, 255, 0), 3)
+    cv.imwrite("perim_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
     # PLOT
     data = perim_list
-
     # BOXPLOT
     boxplot = sns.boxplot(y=data, width=0.25)
-
     # TODO manter frequência de linhas de grade e espaçar frequência de números
     # boxplot.yaxis.set_major_locator(ticker.MultipleLocator(0.05))
     # boxplot.yaxis.set_major_formatter(ticker.ScalarFormatter())
-
     fig1 = boxplot.get_figure()
-
     # plt.title("Crypt axis ratio boxplot")
     # plt.ylabel("Axis ratio")
-    fig1.savefig("perim_box_plot.png", dpi=300, bbox_inches="tight")
+    fig1.savefig("perim_box_plot.jpg", dpi=300, bbox_inches="tight")
     # plt.show(boxplot)
     plt.clf()
-
     # DISTRIBUTION
     distribution = sns.distplot(data)  # bin: freedman-diaconis
-
     # distribution.xaxis.set_major_locator(ticker.MultipleLocator(0.2))
     # distribution.xaxis.set_major_formatter(ticker.ScalarFormatter())
-
     # distribution.yaxis.set_major_locator(ticker.MultipleLocator(1))
     # distribution.yaxis.set_major_formatter(ticker.ScalarFormatter())
-
     fig2 = distribution.get_figure()
-
     plt.title("Perimeter distribution")
     plt.ylabel("Density")
     plt.xlabel("Perimeter (um)")  # TODO usar simbolo grego
-
-    fig2.savefig("perim_dist_plot.png", dpi=300, bbox_inches="tight")
-    plt.show(distribution)
+    fig2.savefig("perim_dist_plot.jpg", dpi=300, bbox_inches="tight")
+    # plt.show(distribution)
     plt.clf()
-
-    cv.imwrite("perm_fig.png", image)
-    return [np.mean(perim_list), np.std(perim_list)], [np.mean(spher_list)*100, np.std(spher_list)*100] 
+    return [np.mean(perim_list), np.std(perim_list)], [np.mean(spher_list)*100, np.std(spher_list)*100]
 
 
 def axis_ratio(image, crypts_list):
@@ -410,44 +396,33 @@ def axis_ratio(image, crypts_list):
         else:
             mama_list.append(heigth/width)
         cv.rectangle(image, (x, y), (x + width, y + heigth), (0, 0, 255), 3)
-    cv.imwrite("axisr_fig.png", image)
+    cv.imwrite("axisr_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
     # PLOT
     data = mama_list
-
     # BOXPLOT
     boxplot = sns.boxplot(y=data, width=0.25)
-
     # TODO manter frequência de linhas de grade e espaçar frequência de números
     boxplot.yaxis.set_major_locator(ticker.MultipleLocator(0.05))
     boxplot.yaxis.set_major_formatter(ticker.ScalarFormatter())
-
     fig1 = boxplot.get_figure()
-
     plt.title("Crypt axis ratio boxplot")
     plt.ylabel("Axis ratio")
-    fig1.savefig("axis_box_plot.png", dpi=300, bbox_inches="tight")
+    fig1.savefig("axis_box_plot.jpg", dpi=300, bbox_inches="tight")
     # plt.show(boxplot)
     plt.clf()
-
     # DISTRIBUTION
     distribution = sns.distplot(data)  # bin: freedman-diaconis
-
     distribution.xaxis.set_major_locator(ticker.MultipleLocator(0.2))
     distribution.xaxis.set_major_formatter(ticker.ScalarFormatter())
-
     distribution.yaxis.set_major_locator(ticker.MultipleLocator(1))
     distribution.yaxis.set_major_formatter(ticker.ScalarFormatter())
-
     fig2 = distribution.get_figure()
-
     plt.title("Crypt axis ratio distribution")
     plt.ylabel("Density")
     plt.xlabel("Axis ratio")
-
-    fig2.savefig("axis_dist_plot.png", dpi=300, bbox_inches="tight")
+    fig2.savefig("axis_dist_plot.jpg", dpi=300, bbox_inches="tight")
     # plt.show(distribution)
     plt.clf()
-
     return np.mean(mama_list), np.std(mama_list)
 
 
@@ -456,7 +431,7 @@ def pixel_micrometer(value_pixel):
     CONST_PIXEL = 51
     CONST_MICROM = 20
     return (CONST_MICROM * value_pixel) / CONST_PIXEL
-  
+
 
 def draw_countours(image, crypts_list):
     for crypt in crypts_list:
@@ -485,10 +460,8 @@ def main():
     ap.add_argument("-p", "--path", type=str, required=False,
                     help="Input file or directory of images path")
     args = vars(ap.parse_args())
-
     function = args["function"]
     source = args["path"]
-
     if (function == "video_frame"):
         video_frame(source)
     elif (function == "video_frame_crop"):
