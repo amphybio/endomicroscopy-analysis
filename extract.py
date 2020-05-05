@@ -177,17 +177,17 @@ def cryptometry(source):
     print("\nParameters\t\t MEAN\t\t STD")
     print("Axis ratio\t\t %.2f\t\t %.2f" %
           (crypts_measures[0][0], crypts_measures[0][1]))
-    print("Perimeter(px)\t\t %.2f\t %.2f" %
+    print("Perimeter(\u03BCm)\t\t %.2f\t\t %.2f" %
           (crypts_measures[1][0], crypts_measures[1][1]))
     print("Sphericity(%%)\t\t %.2f\t\t %.2f" %
           (crypts_measures[2][0], crypts_measures[2][1]))
-    print("Mean distance(px)\t %.2f\t\t %.2f" %
+    print("Mean distance(\u03BCm)\t %.2f\t\t %.2f" %
           (crypts_measures[3][0], crypts_measures[3][1]))
-    print("Min  distance(px)\t %.2f\t\t %.2f" %
+    print("Min  distance(\u03BCm)\t %.2f\t\t %.2f" %
           (crypts_measures[4][0], crypts_measures[4][1]))
-    print("Wall Thickness(px)\t %.2f\t\t %.2f" %
+    print("Wall Thickness(\u03BCm)\t %.2f\t\t %.2f" %
           (crypts_measures[5][0], crypts_measures[5][1]))
-    print("Max Feret(px)\t\t %.2f\t\t %.2f" %
+    print("Max Feret(\u03BCm)\t\t %.2f\t\t %.2f" %
           (crypts_measures[6][0], crypts_measures[6][1]))
     print("\nFinished cryptometry")
     for sub_dir in dir_list:
@@ -251,6 +251,7 @@ def maximal_feret(image, crypts_list):
     print("TIME H:%.2fs \t B:%.2fs \t DIF:%2.f" %
           (h_time, b_time, abs(h_time-b_time)))  # 35~40s
     cv.imwrite("feret_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
+    feret_diameters = pixel_micrometer(feret_diameters)
     return np.mean(feret_diameters), np.std(feret_diameters)
 
 
@@ -293,6 +294,7 @@ def wall_thickness(image, crypts_list):
                 cv.circle(image,  tuple(minB[0]), 7, (0, 0, 255), -1)
                 cv.line(image, tuple(minA[0]), tuple(minB[0]), (0, 0, 255), 3)
     cv.imwrite("wall_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
+    wall_list = pixel_micrometer(wall_list)
     return np.mean(wall_list), np.std(wall_list)
 
 
@@ -326,6 +328,8 @@ def mean_distance(image, crypts_list):
         if min_dist != MAX_DIST:
             min_dist_list.append(min_dist)
     cv.imwrite("dist_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
+    mean_dist_list = pixel_micrometer(mean_dist_list)
+    min_dist_list = pixel_micrometer(min_dist_list)
     return [np.mean(mean_dist_list), np.std(mean_dist_list)], [np.mean(min_dist_list), np.std(min_dist_list)]
 
 
@@ -355,6 +359,7 @@ def perimeter(image, crypts_list):
         # approx = cv.approxPolyDP(cont, epsilon, True)
         # cv.drawContours(image, [approx], -1, (0, 255, 0), 3)
     cv.imwrite("perim_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
+    perim_list = pixel_micrometer(perim_list)
     # PLOT
     data = perim_list
     # BOXPLOT
@@ -377,7 +382,7 @@ def perimeter(image, crypts_list):
     fig2 = distribution.get_figure()
     plt.title("Perimeter distribution")
     plt.ylabel("Density")
-    plt.xlabel("Perimeter (um)")  # TODO usar simbolo grego
+    plt.xlabel("Perimeter (\u03BCm)")
     fig2.savefig("perim_dist_plot.jpg", dpi=300, bbox_inches="tight")
     # plt.show(distribution)
     plt.clf()
@@ -426,11 +431,17 @@ def axis_ratio(image, crypts_list):
     return np.mean(mama_list), np.std(mama_list)
 
 
-def pixel_micrometer(value_pixel):
+def pixel_micrometer(value_pixel, is_list=True):
     # 51 pixels correspond to 20 micrometers
-    CONST_PIXEL = 51
-    CONST_MICROM = 20
-    return (CONST_MICROM * value_pixel) / CONST_PIXEL
+    PIXEL = 51
+    MICROMETER = 20
+    if is_list:
+        value_micrometer = []
+        for value in value_pixel:
+            value_micrometer.append((MICROMETER * value) / PIXEL)
+        return value_micrometer
+    else:
+        return (MICROMETER * value_pixel) / PIXEL
 
 
 def draw_countours(image, crypts_list):
