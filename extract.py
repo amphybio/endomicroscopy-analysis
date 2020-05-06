@@ -183,13 +183,13 @@ def cryptometry(source):
     end = timer()
     time.append(end-start)
     start = timer()
-    # crypts_measures.append(wall_thickness(image.copy(), crypts_list, 'H'))
-    crypts_measures.append(wall_thickness(image.copy(), crypts_list))
+    crypts_measures.append(wall_thickness(image.copy(), crypts_list, 'H'))
+    # crypts_measures.append(wall_thickness(image.copy(), crypts_list))
     end = timer()
     time.append(end-start)
     start = timer()
-    # crypts_measures.append(maximal_feret(image.copy(), crypts_list, 'H'))
-    crypts_measures.append(maximal_feret(image.copy(), crypts_list))
+    crypts_measures.append(maximal_feret(image.copy(), crypts_list, 'H'))
+    #crypts_measures.append(maximal_feret(image.copy(), crypts_list))
     end = timer()
     time.append(end-start)
     print("\nMeasures\t\t MEAN\t\t STD\t\t TIME(s)")
@@ -273,74 +273,55 @@ def maximal_feret(image, crypts_list, algorithm='B'):
 
 
 def wall_thickness(image, crypts_list, algorithm='B'):
-    # Executando para os N primeiros vizinhos
-    center_list = get_center(crypts_list)
-    wall_list = [0] * len(crypts_list)
     MAX_DIST = 735
-    for first_index, first_center in enumerate(center_list):
-        previous_dist = MAX_DIST
-        for second_index, second_center in enumerate(center_list[first_index+1:]):
-            dist_center = distance(first_center, second_center)
-            if dist_center < MAX_DIST:
-                if algorithm == 'B':
-                    # BRUTE-FORCE
-                    minA = [0]
-                    minB = [0]
-                    min_wall = MAX_DIST
-                    for first_point in crypts_list[first_index]:
-                        first_point = first_point[0]
-                        nested_index = first_index + 1 + second_index
-                        for second_point in crypts_list[nested_index]:
-                            second_point = second_point[0]
-                            dist_wall = distance(first_point, second_point)
-                            if dist_wall < min_wall:
-                                min_wall = dist_wall
-                                minA[0] = first_point
-                                minB[0] = second_point
-                    if min_wall < previous_dist:
-                        previous_dist = min_wall
-                        wall_list[first_index] = min_wall
-                        cv.circle(image,  tuple(minA[0]), 7, (0, 0, 255), -1)
-                        cv.circle(image,  tuple(minB[0]), 7, (0, 0, 255), -1)
-                        cv.line(image, tuple(minA[0]), tuple(
-                            minB[0]), (0, 0, 255), 3)
-                else:
-                    # HEURISTIC
-                    slope = ((second_center[1] - first_center[1]) /
-                             (second_center[0] - first_center[0]))
-                    first_list = []
-                    second_list = []
-                    for first_point in crypts_list[first_index]:
-                        first_point = first_point[0]
-                        if collinear(slope, first_center, first_point):
-                            if between_points(slope, first_center, second_center, first_point):
-                                first_list.append(first_point)
-                    nested_index = first_index + 1 + second_index
-                    for second_point in crypts_list[nested_index]:
-                        second_point = second_point[0]
-                        if collinear(slope, first_center, second_point):
-                            if between_points(slope, first_center, second_center, second_point):
-                                second_list.append(second_point)
-                    minA = [0]
-                    minB = [0]
-                    for pointA in first_list:
-                        min_wall = MAX_DIST
-                        for pointB in second_list:
-                            dist = distance(pointA, pointB)
-                            if dist < min_wall:
-                                min_wall = dist
-                                minA[0] = pointA
-                                minB[0] = pointB
-                        if min_wall < previous_dist:
-                            previous_dist = min_wall
-                            wall_list[first_index] = min_wall
-                    cv.circle(image,  tuple(minA[0]), 7, (0, 255, 255), -1)
-                    cv.circle(image,  tuple(minB[0]), 7, (0, 255, 255), -1)
-                    cv.line(image, tuple(minA[0]), tuple(
-                        minB[0]), (0, 255, 255), 3)
+    wall_list = [0] * len(crypts_list)
+    neighbors_list = neighbors(crypts_list)
+    for crypt_index, crypt in enumerate(crypts_list):
+        min_wall = MAX_DIST
+        wall_crypt_point = [0]
+        wall_neighbor_point = [0]
+        for neighbor in neighbors_list[crypt_index]:
+            if algorithm == 'B':
+                # BRUTE-FORCE
+                for crypt_point in crypt:
+                    for neighbor_point in crypts_list[neighbor[0]]:
+                        dist_wall = distance(crypt_point[0], neighbor_point[0])
+                        if dist_wall < min_wall:
+                            min_wall = dist_wall
+                            wall_crypt_point[0] = crypt_point[0]
+                            wall_neighbor_point[0] = neighbor_point[0]
+                            wall_list[crypt_index] = min_wall
+            else:
+                # HEURISTIC
+                center_list = get_center(crypts_list)
+                crypt_center = center_list[crypt_index]
+                neighbor_center = center_list[neighbor[0]]
+                slope = ((neighbor_center[1] - crypt_center[1]) /
+                         (neighbor_center[0] - crypt_center[0]))
+                crypt_wall = []
+                for crypt_point in crypt:
+                    if collinear(slope, crypt_center, crypt_point[0]):
+                        if between_points(slope, crypt_center, neighbor_center, crypt_point[0]):
+                            crypt_wall.append(crypt_point[0])
+                neighbor_wall = []
+                for neighbor_point in crypts_list[neighbor[0]]:
+                    if collinear(slope, crypt_center, neighbor_point[0]):
+                        if between_points(slope, crypt_center, neighbor_center, neighbor_point[0]):
+                            neighbor_wall.append(neighbor_point[0])
+                for pointA in crypt_wall:
+                    for pointB in neighbor_wall:
+                        dist_wall = distance(pointA, pointB)
+                        if dist_wall < min_wall:
+                            min_wall = dist_wall
+                            wall_crypt_point[0] = pointA
+                            wall_neighbor_point[0] = pointB
+                            wall_list[crypt_index] = min_wall
+        cv.circle(image,  tuple(wall_crypt_point[0]), 7, (0, 0, 255), -1)
+        cv.circle(image,  tuple(wall_neighbor_point[0]), 7, (0, 0, 255), -1)
+        cv.line(image, tuple(wall_crypt_point[0]), tuple(
+            wall_neighbor_point[0]), (0, 0, 255), 3)
     cv.imwrite("wall_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
     wall_list = pixel_micrometer(wall_list)
-    print(wall_list)
     return np.mean(wall_list), np.std(wall_list)
 
 
