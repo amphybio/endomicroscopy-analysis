@@ -213,6 +213,19 @@ def cryptometry(source):
                        shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
 
 
+def neighbors(crypts_list):
+    MAX_DIST = 735
+    neighbors_list = [[] for crypt in range(len(crypts_list))]
+    center_list = get_center(crypts_list)
+    for crypt_index, first_center in enumerate(center_list):
+        for neighbor_index, second_center in enumerate(center_list):
+            dist = distance(first_center, second_center)
+            if dist < MAX_DIST and dist != 0:
+                neighbors_list[crypt_index].append((
+                    neighbor_index, dist))
+    return neighbors_list
+
+
 def maximal_feret(image, crypts_list, algorithm='B'):
     feret_diameters = []
     if algorithm == 'B':
