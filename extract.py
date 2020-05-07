@@ -183,13 +183,13 @@ def cryptometry(source):
     end = timer()
     time.append(end-start)
     start = timer()
-    crypts_measures.append(wall_thickness(image.copy(), crypts_list, 'H'))
-    # crypts_measures.append(wall_thickness(image.copy(), crypts_list))
+    # crypts_measures.append(wall_thickness(image.copy(), crypts_list, 'H'))
+    crypts_measures.append(wall_thickness(image.copy(), crypts_list))
     end = timer()
     time.append(end-start)
     start = timer()
-    crypts_measures.append(maximal_feret(image.copy(), crypts_list, 'H'))
-    #crypts_measures.append(maximal_feret(image.copy(), crypts_list))
+    # crypts_measures.append(maximal_feret(image.copy(), crypts_list, 'H'))
+    crypts_measures.append(maximal_feret(image.copy(), crypts_list))
     end = timer()
     time.append(end-start)
     print("\nMeasures\t\t MEAN\t\t STD\t\t TIME(s)")
@@ -235,14 +235,12 @@ def maximal_feret(image, crypts_list, algorithm='B'):
             max_pointA = [0]
             max_pointB = [0]
             for index, pointA in enumerate(crypt):
-                pointA = pointA[0]
                 for pointB in crypt[index+1:]:
-                    pointB = pointB[0]
-                    dist = distance(pointA, pointB)
+                    dist = distance(pointA[0], pointB[0])
                     if dist > max_dist:
                         max_dist = dist
-                        max_pointA[0] = pointA
-                        max_pointB[0] = pointB
+                        max_pointA[0] = pointA[0]
+                        max_pointB[0] = pointB[0]
             cv.circle(image, tuple(max_pointA[0]), 7, (0, 0, 255), -1)
             cv.circle(image, tuple(max_pointB[0]), 7, (0, 0, 255), -1)
             cv.line(image, tuple(max_pointA[0]), tuple(
@@ -258,14 +256,14 @@ def maximal_feret(image, crypts_list, algorithm='B'):
             y_distance = distance(top, bottom)
             x_distance = distance(left, right)
             if x_distance > y_distance:
-                cv.circle(image, left, 7, (0, 255, 255), -1)
-                cv.circle(image, right, 7, (0, 255, 255), -1)
-                cv.line(image, left, right, (0, 255, 255), thickness=3)
+                cv.circle(image, left, 7, (255, 0, 0), -1)
+                cv.circle(image, right, 7, (255, 0, 0), -1)
+                cv.line(image, left, right, (255, 0, 0), thickness=3)
                 feret_diameters.append(x_distance)
             else:
-                cv.circle(image, top, 7, (0, 255, 255), -1)
-                cv.circle(image, bottom, 7, (0, 255, 255), -1)
-                cv.line(image, top, bottom, (0, 255, 255), thickness=3)
+                cv.circle(image, top, 7, (255, 0, 0), -1)
+                cv.circle(image, bottom, 7, (255, 0, 0), -1)
+                cv.line(image, top, bottom, (255, 0, 0), thickness=3)
                 feret_diameters.append(y_distance)
     cv.imwrite("feret_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
     feret_diameters = pixel_micrometer(feret_diameters)
@@ -336,24 +334,23 @@ def collinear(slope, first_point, collinear_point):
 
 
 def mean_distance(image, crypts_list):
+    MAX_DIST = 735
     center_list = get_center(crypts_list)
     for center in center_list:
         cv.circle(image,  (center), 7, (0, 0, 255), -1)
     mean_dist_list = []
     min_dist_list = []
-    MAX_DIST = 735
-    for index, first_point in enumerate(center_list):
+    neighbors_list = neighbors(crypts_list)
+    for index, first_center in enumerate(center_list):
         min_dist = MAX_DIST
-        for second_point in center_list[index+1:]:
-            dist = distance(first_point, second_point)
-            if dist < MAX_DIST:
-                cv.line(image, first_point, second_point,
-                        (0, 0, 255), thickness=3)
-                mean_dist_list.append(dist)
-                if dist < min_dist:
-                    min_dist = dist
-        if min_dist != MAX_DIST:
-            min_dist_list.append(min_dist)
+        for neighbor in neighbors_list[index]:
+            second_center = center_list[neighbor[0]]
+            cv.line(image, first_center, second_center,
+                    (0, 0, 255), thickness=3)
+            mean_dist_list.append(neighbor[1])
+            if neighbor[1] < min_dist:
+                min_dist = neighbor[1]
+        min_dist_list.append(min_dist)
     cv.imwrite("dist_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
     mean_dist_list = pixel_micrometer(mean_dist_list)
     min_dist_list = pixel_micrometer(min_dist_list)
