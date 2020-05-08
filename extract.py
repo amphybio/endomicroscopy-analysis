@@ -40,22 +40,14 @@
 
 import cv2 as cv
 import numpy as np
-import argparse
 import subprocess
-import pathlib
-import sys
-import math
-from timeit import default_timer as timer
-import seaborn as sns
-import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
-# Define style plots
-sns.set(context='notebook', style='ticks', font='Arial', font_scale=2, rc={
-        'axes.grid': True, 'grid.linestyle': 'dashed', 'lines.linewidth': 2, 'xtick.direction': 'in', 'ytick.direction': 'in', 'figure.figsize': (7, 3.09017)})  # (1.4, 0.618034)
-sns.set_palette(palette='bright')
 
 
 def dir_structure(path, dir_list):
+    if not path.is_file():
+        print(f"The path {str(path)} is not a valid file name! Exiting...")
+        import sys
+        sys.exit()
     for dire in dir_list:
         path_dir = path.parents[0] / dire
         if not path_dir.is_dir():
@@ -63,30 +55,31 @@ def dir_structure(path, dir_list):
         sub_dir = path_dir / path.stem
         dir_exists(sub_dir)
         sub_dir.mkdir()
-        print("New directory structure was created! Source: %s" % str(sub_dir))
+        print(f"New directory structure was created! Source: {str(sub_dir)}")
 
 
 def dir_exists(path):
     if path.is_dir():
         option = input(
-            " Path %s already exists! Want to send to sandbox? (y/n)"
-            " *Caution!* To press n will overwrite directory\n" % str(path))
+            f" Path {str(path)} already exists! Want to send to sandbox? (y/n)"
+            " *Caution!* To press n will overwrite directory\n")
         if option == "y":
-            if "main" in str(path):
-                hierarchy = path.parts
-                main_index = hierarchy.index("main")
-                path_index = len(hierarchy)-(2 + max(0, main_index-1))
-                print("Directory was sent to sandbox! Code: %s" %
-                      send_sandbox(path, (path.parents[path_index] / "sandbox" / hierarchy[main_index+1])))
-            else:
+            if not ("main" in str(path)):
                 print("Directory 'main' not found! Exiting...")
+                import sys
                 sys.exit()
+            hierarchy = path.parts
+            main_index = hierarchy.index("main")
+            path_index = len(hierarchy)-(2 + max(0, main_index-1))
+            print("Directory was sent to sandbox! Code: "
+                  f"{send_sandbox(path, (path.parents[path_index] / 'sandbox' / hierarchy[main_index+1]))}")
         elif option == "n":
-            subprocess.run("rm -rf "+str(path.resolve()), shell=True,
+            subprocess.run(f"rm -rf {str(path.resolve())}", shell=True,
                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
-            print("Directory %s was deleted!" % str(path))
+            print(f"Directory {str(path)} was deleted!")
         else:
             print("Option unavailable! Exiting...")
+            import sys
             sys.exit()
 
 
@@ -95,12 +88,12 @@ def send_sandbox(path, dest_path):
         dest_path.mkdir()
     count = subprocess.run("find . -maxdepth 1 -type f | wc -l", cwd=dest_path,
                            shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
-    key_sand = '{:04d}'.format(int(count.stdout))
-    subprocess.run("zip -r "+key_sand+".zip "+str(path),
+    key_sand = f"{int(count.stdout):04d}"
+    subprocess.run(f"zip -r {key_sand}.zip {str(path)}",
                    shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
-    subprocess.run("rm -rf "+str(path.resolve()),
+    subprocess.run(f"rm -rf {str(path.resolve())}",
                    shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
-    mv = subprocess.run("mv -vn "+key_sand+".zip "+str(dest_path.resolve()),
+    mv = subprocess.run(f"mv -vn {key_sand}.zip {str(dest_path.resolve())}",
                         shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
     if (mv.stdout == ''):
         print("Error to move: destination path already exists!")
@@ -109,6 +102,7 @@ def send_sandbox(path, dest_path):
 
 def video_frame(source, crop=False):
     # Convert a video to frame images
+    import pathlib
     path = pathlib.Path(source)
     dir_structure(path, ["frame"])
     sub_dir = path.parents[0] / "frame" / path.stem
@@ -120,10 +114,10 @@ def video_frame(source, crop=False):
         image = remove_text(gray_frame)
         if crop is True:
             image = image[75:500, 75:500]
-        cv.imwrite(str(sub_dir)+"/frame%03d.png" % count, image)
+        cv.imwrite(f"{str(sub_dir)}/frame{count:03d}.png", image)
         success, image = vidcap.read()
         count += 1
-    print("Finished:", source)
+    print(f"Finished: {source}")
 
 
 def remove_text(image):
@@ -156,11 +150,12 @@ def segmentation(image):
         area = cv.contourArea(countour)
         if area > MIN_AREA and area < MAX_AREA:
             crypts_list.append(countour)
-    print("Number of crypts assessed:", len(crypts_list))
+    print(f"Number of crypts assessed: {len(crypts_list)}")
     return crypts_list
 
 
 def cryptometry(source):
+    import pathlib
     path = pathlib.Path(source)
     dir_list = ["fig", "plot"]
     dir_structure(path, dir_list)
@@ -169,6 +164,7 @@ def cryptometry(source):
     crypts_list = segmentation(image.copy())
     draw_countours(image, crypts_list)
     crypts_measures = []
+    from timeit import default_timer as timer
     time = []
     start = timer()
     crypts_measures.append(axis_ratio(image.copy(), crypts_list))
@@ -193,23 +189,23 @@ def cryptometry(source):
     end = timer()
     time.append(end-start)
     print("\nMeasures\t\t MEAN\t\t STD\t\t TIME(s)")
-    print("Axis ratio\t\t %.2f\t\t %.2f\t\t %.2f" %
-          (crypts_measures[0][0], crypts_measures[0][1], time[0]))
-    print("Perimeter(\u03BCm)\t\t %.2f\t\t %.2f\t\t %.2f" %
-          (crypts_measures[1][0], crypts_measures[1][1], time[1]))
-    print("Sphericity(%%)\t\t %.2f\t\t %.2f\t\t -" %
-          (crypts_measures[2][0], crypts_measures[2][1]))
-    print("Mean distance(\u03BCm)\t %.2f\t\t %.2f\t\t %.2f" %
-          (crypts_measures[3][0], crypts_measures[3][1], time[2]))
-    print("Min  distance(\u03BCm)\t %.2f\t\t %.2f\t\t -" %
-          (crypts_measures[4][0], crypts_measures[4][1]))
-    print("Wall Thickness(\u03BCm)\t %.2f\t\t %.2f\t\t %.2f" %
-          (crypts_measures[5][0], crypts_measures[5][1], time[3]))
-    print("Max Feret(\u03BCm)\t\t %.2f\t\t %.2f\t\t %.2f" %
-          (crypts_measures[6][0], crypts_measures[6][1], time[4]))
+    print(f"Axis ratio\t\t {crypts_measures[0][0]:.2f}\t\t "
+          f"{crypts_measures[0][1]:.2f}\t\t {time[0]:.2f}")
+    print(f"Perimeter(\u03BCm)\t\t {crypts_measures[1][0]:.2f}\t\t"
+          f" {crypts_measures[1][1]:.2f}\t\t {time[1]:.2f}")
+    print(f"Sphericity(%%)\t\t {crypts_measures[2][0]:.2f}\t\t "
+          f"{crypts_measures[2][1]:.2f}\t\t -")
+    print(f"Mean distance(\u03BCm)\t {crypts_measures[3][0]:.2f}\t\t "
+          f"{crypts_measures[3][1]:.2f}\t\t {time[2]:.2f}")
+    print(f"Min  distance(\u03BCm)\t {crypts_measures[4][0]:.2f}\t\t "
+          f"{crypts_measures[4][1]:.2f}\t\t -")
+    print(f"Wall Thickness(\u03BCm)\t {crypts_measures[5][0]:.2f}\t\t "
+          f"{crypts_measures[5][1]:.2f}\t\t {time[3]:.2f}")
+    print(f"Max Feret(\u03BCm)\t\t {crypts_measures[6][0]:.2f}\t\t "
+          f"{crypts_measures[6][1]:.2f}\t\t {time[4]:.2f}")
     print("\nFinished cryptometry")
     for sub_dir in dir_list:
-        subprocess.run("mv -vn *"+sub_dir+".jpg "+str(path.parents[0] / sub_dir / path.stem),
+        subprocess.run(f"mv -vn *{sub_dir}.jpg {str(path.parents[0] / sub_dir / path.stem)}",
                        shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
 
 
@@ -324,10 +320,12 @@ def wall_thickness(image, crypts_list, algorithm='B'):
 
 
 def between_points(slope, first_point, second_point, mid_point):
+    import math
     return math.isclose((distance(first_point, mid_point)+distance(mid_point, second_point)), distance(first_point, second_point), abs_tol=abs(slope))
 
 
 def collinear(slope, first_point, collinear_point):
+    import math
     equation = ((slope*collinear_point[0]) -
                 (slope*first_point[0]))+first_point[1]
     return math.isclose(equation, collinear_point[1], abs_tol=(abs(slope))+1)
@@ -372,6 +370,12 @@ def get_center(crypts_list):
 
 
 def perimeter(image, crypts_list):
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+    # Define style plots
+    sns.set(context='notebook', style='ticks', font='Arial', font_scale=2, rc={
+        'axes.grid': True, 'grid.linestyle': 'dashed', 'lines.linewidth': 2, 'xtick.direction': 'in', 'ytick.direction': 'in', 'figure.figsize': (7, 3.09017)})  # (1.4, 0.618034)
+    sns.set_palette(palette='bright')
     perim_list = []
     spher_list = []
     for crypt in crypts_list:
@@ -417,6 +421,13 @@ def axis_ratio(image, crypts_list):
     # Ratio between major and minor axis (Ma/ma ratio)
     # Give the mean and standard deviation of the ratio between the width and
     # the heigth of the box containing the crypt
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+    import matplotlib.ticker as ticker
+    # Define style plots
+    sns.set(context='notebook', style='ticks', font='Arial', font_scale=2, rc={
+        'axes.grid': True, 'grid.linestyle': 'dashed', 'lines.linewidth': 2, 'xtick.direction': 'in', 'ytick.direction': 'in', 'figure.figsize': (7, 3.09017)})  # (1.4, 0.618034)
+    sns.set_palette(palette='bright')
     mama_list = []
     for crypt in crypts_list:
         x, y, width, heigth = cv.boundingRect(crypt)
@@ -482,13 +493,14 @@ def draw_countours(image, crypts_list):
 #         stitcher = cv.Stitcher.create(cv.Stitcher_SCANS)
 #         status, pano = stitcher.stitch(images)
 #     if status != cv.Stitcher_OK:
-#         print("Can't stitch images, error code = %d" % status)
+#         print(f"Can't stitch images, error code = {status}")
 #         sys.exit(-1)
 #         cv.imwrite("teste.png", pano)
 #         print("stitching completed successfully.")
 
 
 def main():
+    import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument("-f", "--function", type=str, required=True,
                     help="Set a function to call (video_frame; video_frame_crop, cryptometry)")
