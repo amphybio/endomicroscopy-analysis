@@ -38,18 +38,16 @@
 # python extract.py -f stitch -p midia/main/1234/frame/016-2017
 # python extract.py -f cryptometry -p midia/main/1234/stitch100.tif
 
-
 import cv2 as cv
 import numpy as np
-import argparse
 import subprocess
-import pathlib
-import sys
-import math
-from timeit import default_timer as timer
 
 
 def dir_structure(path, dir_list):
+    if not path.is_file():
+        print(f"The path {str(path)} is not a valid file name! Exiting...")
+        import sys
+        sys.exit()
     for dire in dir_list:
         path_dir = path.parents[0] / dire
         if not path_dir.is_dir():
@@ -57,30 +55,31 @@ def dir_structure(path, dir_list):
         sub_dir = path_dir / path.stem
         dir_exists(sub_dir)
         sub_dir.mkdir()
-        print("New directory structure was created! Source: %s" % str(sub_dir))
+        print(f"New directory structure was created! Source: {str(sub_dir)}")
 
 
 def dir_exists(path):
     if path.is_dir():
         option = input(
-            " Path %s already exists! Want to send to sandbox? (y/n)" 
-            " *Caution!* To press n will overwrite directory\n" % str(path))
+            f" Path {str(path)} already exists! Want to send to sandbox? (y/n)"
+            " *Caution!* To press n will overwrite directory\n")
         if option == "y":
-            if "main" in str(path):
-                hierarchy = path.parts
-                main_index = hierarchy.index("main")
-                path_index = len(hierarchy)-(2 + max(0, main_index-1))
-                print("Directory was sent to sandbox! Code: %s" %
-                      send_sandbox(path, (path.parents[path_index] / "sandbox" / hierarchy[main_index+1])))
-            else:
+            if not ("main" in str(path)):
                 print("Directory 'main' not found! Exiting...")
+                import sys
                 sys.exit()
+            hierarchy = path.parts
+            main_index = hierarchy.index("main")
+            path_index = len(hierarchy)-(2 + max(0, main_index-1))
+            print("Directory was sent to sandbox! Code: "
+                  f"{send_sandbox(path, (path.parents[path_index] / 'sandbox' / hierarchy[main_index+1]))}")
         elif option == "n":
-            subprocess.run("rm -rf "+str(path.resolve()), shell=True,
+            subprocess.run(f"rm -rf {str(path.resolve())}", shell=True,
                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
-            print("Directory %s was deleted!" % str(path))
+            print(f"Directory {str(path)} was deleted!")
         else:
             print("Option unavailable! Exiting...")
+            import sys
             sys.exit()
 
 
@@ -89,29 +88,21 @@ def send_sandbox(path, dest_path):
         dest_path.mkdir()
     count = subprocess.run("find . -maxdepth 1 -type f | wc -l", cwd=dest_path,
                            shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
-    key_sand = '{:04d}'.format(int(count.stdout))
-    subprocess.run("zip -r "+key_sand+".zip "+str(path),
+    key_sand = f"{int(count.stdout):04d}"
+    subprocess.run(f"zip -r {key_sand}.zip {str(path)}",
                    shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
-    subprocess.run("rm -rf "+str(path.resolve()),
+    subprocess.run(f"rm -rf {str(path.resolve())}",
                    shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
-    mv = subprocess.run("mv -vn "+key_sand+".zip "+str(dest_path.resolve()),
+    mv = subprocess.run(f"mv -vn {key_sand}.zip {str(dest_path.resolve())}",
                         shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
     if (mv.stdout == ''):
         print("Error to move: destination path already exists!")
     return key_sand
 
-import seaborn as sns
-import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
-
-# Define style plots
-sns.set(context='notebook', style='ticks', font='Arial', font_scale=2, rc={
-        'axes.grid': True, 'grid.linestyle': 'dashed', 'lines.linewidth': 2, 'xtick.direction': 'in', 'ytick.direction': 'in', 'figure.figsize': (7, 3.09017)})  # (1.4, 0.618034)
-sns.set_palette(palette='bright')
-
 
 def video_frame(source, crop=False):
     # Convert a video to frame images
+    import pathlib
     path = pathlib.Path(source)
     dir_structure(path, ["frame"])
     sub_dir = path.parents[0] / "frame" / path.stem
@@ -123,10 +114,10 @@ def video_frame(source, crop=False):
         image = remove_text(gray_frame)
         if crop is True:
             image = image[75:500, 75:500]
-        cv.imwrite(str(sub_dir)+"/frame%03d.png" % count, image)
+        cv.imwrite(f"{str(sub_dir)}/frame{count:03d}.png", image)
         success, image = vidcap.read()
         count += 1
-    print("Finished:", source)
+    print(f"Finished: {source}")
 
 
 def remove_text(image):
@@ -159,11 +150,12 @@ def segmentation(image):
         area = cv.contourArea(countour)
         if area > MIN_AREA and area < MAX_AREA:
             crypts_list.append(countour)
-    print("Number of crypts assessed:", len(crypts_list))
+    print(f"Number of crypts assessed: {len(crypts_list)}")
     return crypts_list
 
 
 def cryptometry(source):
+    import pathlib
     path = pathlib.Path(source)
     dir_list = ["fig", "plot"]
     dir_structure(path, dir_list)
@@ -172,163 +164,194 @@ def cryptometry(source):
     crypts_list = segmentation(image.copy())
     draw_countours(image, crypts_list)
     crypts_measures = []
+    from timeit import default_timer as timer
+    time = []
+    start = timer()
     crypts_measures.append(axis_ratio(image.copy(), crypts_list))
+    end = timer()
+    time.append(end-start)
+    start = timer()
     crypts_measures.extend(perimeter(image.copy(), crypts_list))
+    end = timer()
+    time.append(end-start)
+    start = timer()
     crypts_measures.extend(mean_distance(image.copy(), crypts_list))
+    end = timer()
+    time.append(end-start)
+    start = timer()
+    # crypts_measures.append(wall_thickness(image.copy(), crypts_list, 'H'))
     crypts_measures.append(wall_thickness(image.copy(), crypts_list))
+    end = timer()
+    time.append(end-start)
+    start = timer()
+    # crypts_measures.append(maximal_feret(image.copy(), crypts_list, 'H'))
     crypts_measures.append(maximal_feret(image.copy(), crypts_list))
-    print("\nParameters\t\t MEAN\t\t STD")
-    print("Axis ratio\t\t %.2f\t\t %.2f" %
-          (crypts_measures[0][0], crypts_measures[0][1]))
-    print("Perimeter(px)\t\t %.2f\t %.2f" %
-          (crypts_measures[1][0], crypts_measures[1][1]))
-    print("Sphericity(%%)\t\t %.2f\t\t %.2f" %
-          (crypts_measures[2][0], crypts_measures[2][1]))
-    print("Mean distance(px)\t %.2f\t\t %.2f" %
-          (crypts_measures[3][0], crypts_measures[3][1]))
-    print("Min  distance(px)\t %.2f\t\t %.2f" %
-          (crypts_measures[4][0], crypts_measures[4][1]))
-    print("Wall Thickness(px)\t %.2f\t\t %.2f" %
-          (crypts_measures[5][0], crypts_measures[5][1]))
-    print("Max Feret(px)\t\t %.2f\t\t %.2f" %
-          (crypts_measures[6][0], crypts_measures[6][1]))
+    end = timer()
+    time.append(end-start)
+    print("\nMeasures\t\t MEAN\t\t STD\t\t TIME(s)")
+    print(f"Axis ratio\t\t {crypts_measures[0][0]:.2f}\t\t "
+          f"{crypts_measures[0][1]:.2f}\t\t {time[0]:.2f}")
+    print(f"Perimeter(\u03BCm)\t\t {crypts_measures[1][0]:.2f}\t\t"
+          f" {crypts_measures[1][1]:.2f}\t\t {time[1]:.2f}")
+    print(f"Sphericity(%%)\t\t {crypts_measures[2][0]:.2f}\t\t "
+          f"{crypts_measures[2][1]:.2f}\t\t -")
+    print(f"Mean distance(\u03BCm)\t {crypts_measures[3][0]:.2f}\t\t "
+          f"{crypts_measures[3][1]:.2f}\t\t {time[2]:.2f}")
+    print(f"Min  distance(\u03BCm)\t {crypts_measures[4][0]:.2f}\t\t "
+          f"{crypts_measures[4][1]:.2f}\t\t -")
+    print(f"Wall Thickness(\u03BCm)\t {crypts_measures[5][0]:.2f}\t\t "
+          f"{crypts_measures[5][1]:.2f}\t\t {time[3]:.2f}")
+    print(f"Max Feret(\u03BCm)\t\t {crypts_measures[6][0]:.2f}\t\t "
+          f"{crypts_measures[6][1]:.2f}\t\t {time[4]:.2f}")
     print("\nFinished cryptometry")
     for sub_dir in dir_list:
-        subprocess.run("mv -vn *"+sub_dir+".png "+str(path.parents[0] / sub_dir / path.stem),
+        subprocess.run(f"mv -vn *{sub_dir}.jpg {str(path.parents[0] / sub_dir / path.stem)}",
                        shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
 
 
-def maximal_feret(image, crypts_list):
+def neighbors(crypts_list):
+    MAX_DIST = 735
+    neighbors_list = [[] for crypt in range(len(crypts_list))]
+    center_list = get_center(crypts_list)
+    for crypt_index, first_center in enumerate(center_list):
+        for neighbor_index, second_center in enumerate(center_list):
+            dist = distance(first_center, second_center)
+            if dist < MAX_DIST and dist != 0:
+                neighbors_list[crypt_index].append((
+                    neighbor_index, dist))
+    return neighbors_list
+
+
+def maximal_feret(image, crypts_list, algorithm='B'):
     feret_diameters = []
-    # HEURISTICA
-    start = timer()
-    for crypt in crypts_list:
-        left = tuple(crypt[crypt[:, :, 0].argmin()][0])
-        right = tuple(crypt[crypt[:, :, 0].argmax()][0])
-        top = tuple(crypt[crypt[:, :, 1].argmin()][0])
-        bottom = tuple(crypt[crypt[:, :, 1].argmax()][0])
-        y_distance = distance(top, bottom)
-        x_distance = distance(left, right)
-        if x_distance > y_distance:
-            cv.circle(image, left, 7, (0, 255, 255), -1)
-            cv.circle(image, right, 7, (0, 255, 255), -1)
-            cv.line(image, left, right, (0, 255, 255), thickness=3)
-            feret_diameters.append(x_distance)
-        else:
-            cv.circle(image, top, 7, (0, 255, 255), -1)
-            cv.circle(image, bottom, 7, (0, 255, 255), -1)
-            cv.line(image, top, bottom, (0, 255, 255), thickness=3)
-            feret_diameters.append(y_distance)
-    end = timer()
-    h_time = end - start
-    # BRUTA
-    feret = []
-    start = timer()
-    for crypt in crypts_list:
-        max_dist = 0
-        max_pointA = [0]
-        max_pointB = [0]
-        for index, pointA in enumerate(crypt):
-            pointA = pointA[0]
-            for pointB in crypt[index+1:]:
-                pointB = pointB[0]
-                dist = distance(pointA, pointB)
-                if dist > max_dist:
-                    max_dist = dist
-                    max_pointA[0] = pointA
-                    max_pointB[0] = pointB
-        cv.circle(image, tuple(max_pointA[0]), 7, (0, 255, 0), -1)
-        cv.circle(image, tuple(max_pointB[0]), 7, (0, 255, 0), -1)
-        cv.line(image, tuple(max_pointA[0]), tuple(
-            max_pointB[0]), (0, 255, 0), thickness=3)
-        feret.append(max_dist)
-    end = timer()
-    b_time = end - start
-    for i in range(0, len(feret)):
-        print("%s H:%.2f \t B:%.2f \t D:%.2f" %
-              (i, feret_diameters[i], feret[i], abs(feret_diameters[i]-feret[i])))
-    print("MEAN H:%.2f \t B:%.2f \t DIF:%.2f" % (np.mean(feret_diameters),
-                                                 np.mean(feret), abs(np.mean(feret_diameters)-np.mean(feret))))
-    print("STD H:%.2f \t B:%.2f \t DIF:%.2f" % (np.std(feret_diameters),
-                                                np.std(feret), abs(np.std(feret_diameters)-np.std(feret))))
-    print("TIME H:%.2fs \t B:%.2fs \t DIF:%2.f" %
-          (h_time, b_time, abs(h_time-b_time)))  # 35~40s
-    cv.imwrite("feret_fig.png", image)
+    if algorithm == 'B':
+        # BRUTE-FORCE
+        for crypt in crypts_list:
+            max_dist = 0
+            max_pointA = [0]
+            max_pointB = [0]
+            for index, pointA in enumerate(crypt):
+                for pointB in crypt[index+1:]:
+                    dist = distance(pointA[0], pointB[0])
+                    if dist > max_dist:
+                        max_dist = dist
+                        max_pointA[0] = pointA[0]
+                        max_pointB[0] = pointB[0]
+            cv.circle(image, tuple(max_pointA[0]), 7, (0, 0, 255), -1)
+            cv.circle(image, tuple(max_pointB[0]), 7, (0, 0, 255), -1)
+            cv.line(image, tuple(max_pointA[0]), tuple(
+                max_pointB[0]), (0, 0, 255), thickness=3)
+            feret_diameters.append(max_dist)
+    else:
+        # HEURISTIC
+        for crypt in crypts_list:
+            left = tuple(crypt[crypt[:, :, 0].argmin()][0])
+            right = tuple(crypt[crypt[:, :, 0].argmax()][0])
+            top = tuple(crypt[crypt[:, :, 1].argmin()][0])
+            bottom = tuple(crypt[crypt[:, :, 1].argmax()][0])
+            y_distance = distance(top, bottom)
+            x_distance = distance(left, right)
+            if x_distance > y_distance:
+                cv.circle(image, left, 7, (255, 0, 0), -1)
+                cv.circle(image, right, 7, (255, 0, 0), -1)
+                cv.line(image, left, right, (255, 0, 0), thickness=3)
+                feret_diameters.append(x_distance)
+            else:
+                cv.circle(image, top, 7, (255, 0, 0), -1)
+                cv.circle(image, bottom, 7, (255, 0, 0), -1)
+                cv.line(image, top, bottom, (255, 0, 0), thickness=3)
+                feret_diameters.append(y_distance)
+    cv.imwrite("feret_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
+    feret_diameters = pixel_micrometer(feret_diameters)
     return np.mean(feret_diameters), np.std(feret_diameters)
 
 
-def wall_thickness(image, crypts_list):
-    # Executando para os N primeiros vizinhos
-    center_list = get_center(crypts_list)
-    wall_list = []
+def wall_thickness(image, crypts_list, algorithm='B'):
     MAX_DIST = 735
-    for first_index, first_point in enumerate(center_list):
-        for second_index, second_point in enumerate(center_list[first_index+1:]):
-            dist = distance(first_point, second_point)
-            if dist < MAX_DIST:
-                slope = ((second_point[1] - first_point[1]) /
-                         (second_point[0] - first_point[0]))
-                first_wall = []
-                second_wall = []
-                for point in crypts_list[first_index]:
-                    point = point[0]
-                    if collinear(slope, first_point, point):
-                        if between_points(slope, first_point, second_point, point):
-                            first_wall.append(point)
-                nested_index = first_index + 1 + second_index
-                for point in crypts_list[nested_index]:
-                    point = point[0]
-                    if collinear(slope, first_point, point):
-                        if between_points(slope, first_point, second_point, point):
-                            second_wall.append(point)
-                minA = [1]
-                minB = [1]
-                for pointA in first_wall:
-                    min_wall = MAX_DIST
-                    for pointB in second_wall:
-                        dist = distance(pointA, pointB)
-                        if dist < min_wall:
-                            min_wall = dist
-                            minA[0] = pointA
-                            minB[0] = pointB
-                    wall_list.append(min_wall)
-                cv.circle(image,  tuple(minA[0]), 7, (0, 0, 255), -1)
-                cv.circle(image,  tuple(minB[0]), 7, (0, 0, 255), -1)
-                cv.line(image, tuple(minA[0]), tuple(minB[0]), (0, 0, 255), 3)
-    cv.imwrite("wall_fig.png", image)
+    wall_list = [0] * len(crypts_list)
+    neighbors_list = neighbors(crypts_list)
+    for crypt_index, crypt in enumerate(crypts_list):
+        min_wall = MAX_DIST
+        wall_crypt_point = [0]
+        wall_neighbor_point = [0]
+        for neighbor in neighbors_list[crypt_index]:
+            if algorithm == 'B':
+                # BRUTE-FORCE
+                for crypt_point in crypt:
+                    for neighbor_point in crypts_list[neighbor[0]]:
+                        dist_wall = distance(crypt_point[0], neighbor_point[0])
+                        if dist_wall < min_wall:
+                            min_wall = dist_wall
+                            wall_crypt_point[0] = crypt_point[0]
+                            wall_neighbor_point[0] = neighbor_point[0]
+                            wall_list[crypt_index] = min_wall
+            else:
+                # HEURISTIC
+                center_list = get_center(crypts_list)
+                crypt_center = center_list[crypt_index]
+                neighbor_center = center_list[neighbor[0]]
+                slope = ((neighbor_center[1] - crypt_center[1]) /
+                         (neighbor_center[0] - crypt_center[0]))
+                crypt_wall = []
+                for crypt_point in crypt:
+                    if collinear(slope, crypt_center, crypt_point[0]):
+                        if between_points(slope, crypt_center, neighbor_center, crypt_point[0]):
+                            crypt_wall.append(crypt_point[0])
+                neighbor_wall = []
+                for neighbor_point in crypts_list[neighbor[0]]:
+                    if collinear(slope, crypt_center, neighbor_point[0]):
+                        if between_points(slope, crypt_center, neighbor_center, neighbor_point[0]):
+                            neighbor_wall.append(neighbor_point[0])
+                for pointA in crypt_wall:
+                    for pointB in neighbor_wall:
+                        dist_wall = distance(pointA, pointB)
+                        if dist_wall < min_wall:
+                            min_wall = dist_wall
+                            wall_crypt_point[0] = pointA
+                            wall_neighbor_point[0] = pointB
+                            wall_list[crypt_index] = min_wall
+        cv.circle(image,  tuple(wall_crypt_point[0]), 7, (0, 0, 255), -1)
+        cv.circle(image,  tuple(wall_neighbor_point[0]), 7, (0, 0, 255), -1)
+        cv.line(image, tuple(wall_crypt_point[0]), tuple(
+            wall_neighbor_point[0]), (0, 0, 255), 3)
+    cv.imwrite("wall_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
+    wall_list = pixel_micrometer(wall_list)
     return np.mean(wall_list), np.std(wall_list)
 
 
 def between_points(slope, first_point, second_point, mid_point):
+    import math
     return math.isclose((distance(first_point, mid_point)+distance(mid_point, second_point)), distance(first_point, second_point), abs_tol=abs(slope))
 
 
 def collinear(slope, first_point, collinear_point):
+    import math
     equation = ((slope*collinear_point[0]) -
                 (slope*first_point[0]))+first_point[1]
     return math.isclose(equation, collinear_point[1], abs_tol=(abs(slope))+1)
 
 
 def mean_distance(image, crypts_list):
+    MAX_DIST = 735
     center_list = get_center(crypts_list)
     for center in center_list:
         cv.circle(image,  (center), 7, (0, 0, 255), -1)
     mean_dist_list = []
     min_dist_list = []
-    MAX_DIST = 735
-    for index, first_point in enumerate(center_list):
+    neighbors_list = neighbors(crypts_list)
+    for index, first_center in enumerate(center_list):
         min_dist = MAX_DIST
-        for second_point in center_list[index+1:]:
-            dist = distance(first_point, second_point)
-            if dist < MAX_DIST:
-                cv.line(image, first_point, second_point,
-                        (0, 0, 255), thickness=3)
-                mean_dist_list.append(dist)
-                if dist < min_dist:
-                    min_dist = dist
-        if min_dist != MAX_DIST:
-            min_dist_list.append(min_dist)
-    cv.imwrite("dist_fig.png", image)
+        for neighbor in neighbors_list[index]:
+            second_center = center_list[neighbor[0]]
+            cv.line(image, first_center, second_center,
+                    (0, 0, 255), thickness=3)
+            mean_dist_list.append(neighbor[1])
+            if neighbor[1] < min_dist:
+                min_dist = neighbor[1]
+        min_dist_list.append(min_dist)
+    cv.imwrite("dist_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
+    mean_dist_list = pixel_micrometer(mean_dist_list)
+    min_dist_list = pixel_micrometer(min_dist_list)
     return [np.mean(mean_dist_list), np.std(mean_dist_list)], [np.mean(min_dist_list), np.std(min_dist_list)]
 
 
@@ -347,6 +370,12 @@ def get_center(crypts_list):
 
 
 def perimeter(image, crypts_list):
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+    # Define style plots
+    sns.set(context='notebook', style='ticks', font='Arial', font_scale=2, rc={
+        'axes.grid': True, 'grid.linestyle': 'dashed', 'lines.linewidth': 2, 'xtick.direction': 'in', 'ytick.direction': 'in', 'figure.figsize': (7, 3.09017)})  # (1.4, 0.618034)
+    sns.set_palette(palette='bright')
     perim_list = []
     spher_list = []
     for crypt in crypts_list:
@@ -356,52 +385,49 @@ def perimeter(image, crypts_list):
         spher_list.append((4 * np.pi * area) / (perimeter ** 2))
         # epsilon = 0.007 * cv.arcLength(cont, True)
         # approx = cv.approxPolyDP(cont, epsilon, True)
-        # cv.drawContours(image, [approx], -1, (0, 255, 0), 3)  
+        # cv.drawContours(image, [approx], -1, (0, 255, 0), 3)
+    cv.imwrite("perim_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
+    perim_list = pixel_micrometer(perim_list)
     # PLOT
     data = perim_list
-
     # BOXPLOT
     boxplot = sns.boxplot(y=data, width=0.25)
-
     # TODO manter frequência de linhas de grade e espaçar frequência de números
     # boxplot.yaxis.set_major_locator(ticker.MultipleLocator(0.05))
     # boxplot.yaxis.set_major_formatter(ticker.ScalarFormatter())
-
     fig1 = boxplot.get_figure()
-
     # plt.title("Crypt axis ratio boxplot")
     # plt.ylabel("Axis ratio")
-    fig1.savefig("perim_box_plot.png", dpi=300, bbox_inches="tight")
+    fig1.savefig("perim_box_plot.jpg", dpi=300, bbox_inches="tight")
     # plt.show(boxplot)
     plt.clf()
-
     # DISTRIBUTION
     distribution = sns.distplot(data)  # bin: freedman-diaconis
-
     # distribution.xaxis.set_major_locator(ticker.MultipleLocator(0.2))
     # distribution.xaxis.set_major_formatter(ticker.ScalarFormatter())
-
     # distribution.yaxis.set_major_locator(ticker.MultipleLocator(1))
     # distribution.yaxis.set_major_formatter(ticker.ScalarFormatter())
-
     fig2 = distribution.get_figure()
-
     plt.title("Perimeter distribution")
     plt.ylabel("Density")
-    plt.xlabel("Perimeter (um)")  # TODO usar simbolo grego
-
-    fig2.savefig("perim_dist_plot.png", dpi=300, bbox_inches="tight")
-    plt.show(distribution)
+    plt.xlabel("Perimeter (\u03BCm)")
+    fig2.savefig("perim_dist_plot.jpg", dpi=300, bbox_inches="tight")
+    # plt.show(distribution)
     plt.clf()
-
-    cv.imwrite("perm_fig.png", image)
-    return [np.mean(perim_list), np.std(perim_list)], [np.mean(spher_list)*100, np.std(spher_list)*100] 
+    return [np.mean(perim_list), np.std(perim_list)], [np.mean(spher_list)*100, np.std(spher_list)*100]
 
 
 def axis_ratio(image, crypts_list):
     # Ratio between major and minor axis (Ma/ma ratio)
     # Give the mean and standard deviation of the ratio between the width and
     # the heigth of the box containing the crypt
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+    import matplotlib.ticker as ticker
+    # Define style plots
+    sns.set(context='notebook', style='ticks', font='Arial', font_scale=2, rc={
+        'axes.grid': True, 'grid.linestyle': 'dashed', 'lines.linewidth': 2, 'xtick.direction': 'in', 'ytick.direction': 'in', 'figure.figsize': (7, 3.09017)})  # (1.4, 0.618034)
+    sns.set_palette(palette='bright')
     mama_list = []
     for crypt in crypts_list:
         x, y, width, heigth = cv.boundingRect(crypt)
@@ -410,53 +436,48 @@ def axis_ratio(image, crypts_list):
         else:
             mama_list.append(heigth/width)
         cv.rectangle(image, (x, y), (x + width, y + heigth), (0, 0, 255), 3)
-    cv.imwrite("axisr_fig.png", image)
+    cv.imwrite("axisr_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
     # PLOT
     data = mama_list
-
     # BOXPLOT
     boxplot = sns.boxplot(y=data, width=0.25)
-
     # TODO manter frequência de linhas de grade e espaçar frequência de números
     boxplot.yaxis.set_major_locator(ticker.MultipleLocator(0.05))
     boxplot.yaxis.set_major_formatter(ticker.ScalarFormatter())
-
     fig1 = boxplot.get_figure()
-
     plt.title("Crypt axis ratio boxplot")
     plt.ylabel("Axis ratio")
-    fig1.savefig("axis_box_plot.png", dpi=300, bbox_inches="tight")
+    fig1.savefig("axis_box_plot.jpg", dpi=300, bbox_inches="tight")
     # plt.show(boxplot)
     plt.clf()
-
     # DISTRIBUTION
     distribution = sns.distplot(data)  # bin: freedman-diaconis
-
     distribution.xaxis.set_major_locator(ticker.MultipleLocator(0.2))
     distribution.xaxis.set_major_formatter(ticker.ScalarFormatter())
-
     distribution.yaxis.set_major_locator(ticker.MultipleLocator(1))
     distribution.yaxis.set_major_formatter(ticker.ScalarFormatter())
-
     fig2 = distribution.get_figure()
-
     plt.title("Crypt axis ratio distribution")
     plt.ylabel("Density")
     plt.xlabel("Axis ratio")
-
-    fig2.savefig("axis_dist_plot.png", dpi=300, bbox_inches="tight")
+    fig2.savefig("axis_dist_plot.jpg", dpi=300, bbox_inches="tight")
     # plt.show(distribution)
     plt.clf()
-
     return np.mean(mama_list), np.std(mama_list)
 
 
-def pixel_micrometer(value_pixel):
+def pixel_micrometer(value_pixel, is_list=True):
     # 51 pixels correspond to 20 micrometers
-    CONST_PIXEL = 51
-    CONST_MICROM = 20
-    return (CONST_MICROM * value_pixel) / CONST_PIXEL
-  
+    PIXEL = 51
+    MICROMETER = 20
+    if is_list:
+        value_micrometer = []
+        for value in value_pixel:
+            value_micrometer.append((MICROMETER * value) / PIXEL)
+        return value_micrometer
+    else:
+        return (MICROMETER * value_pixel) / PIXEL
+
 
 def draw_countours(image, crypts_list):
     for crypt in crypts_list:
@@ -472,23 +493,22 @@ def draw_countours(image, crypts_list):
 #         stitcher = cv.Stitcher.create(cv.Stitcher_SCANS)
 #         status, pano = stitcher.stitch(images)
 #     if status != cv.Stitcher_OK:
-#         print("Can't stitch images, error code = %d" % status)
+#         print(f"Can't stitch images, error code = {status}")
 #         sys.exit(-1)
 #         cv.imwrite("teste.png", pano)
 #         print("stitching completed successfully.")
 
 
 def main():
+    import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument("-f", "--function", type=str, required=True,
                     help="Set a function to call (video_frame; video_frame_crop, cryptometry)")
     ap.add_argument("-p", "--path", type=str, required=False,
                     help="Input file or directory of images path")
     args = vars(ap.parse_args())
-
     function = args["function"]
     source = args["path"]
-
     if (function == "video_frame"):
         video_frame(source)
     elif (function == "video_frame_crop"):
