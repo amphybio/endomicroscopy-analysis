@@ -522,10 +522,7 @@ def axis_ratio(image, crypts_list):
     mama_list = []
     for crypt in crypts_list:
         x, y, width, heigth = cv.boundingRect(crypt)
-        if (width > heigth):
-            mama_list.append(width/heigth)
-        else:
-            mama_list.append(heigth/width)
+        mama_list.append(max(width, heigth), min(width, heigth))
         cv.rectangle(image, (x, y), (x + width, y + heigth), (0, 0, 255), 3)
     cv.imwrite("axisr_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
     to_csv(mama_list, ["axisr", "Axis Ratio", "", "Ratio"])
