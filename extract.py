@@ -23,30 +23,28 @@
 #                       cryptometry)
 #                  -p PATH, --path PATH
 #                     Input file or directory of images path
-#  REQUIREMENTS:  OpenCV, Python, Numpy, Seaborn
+#  REQUIREMENTS:  OpenCV, Python, Numpy
 #          BUGS:  ---
 #         NOTES:  ---
 #         AUTOR:  Alan U. Sabino <alan.sabino@usp.br>
-#       VERSION:  0.2
+#       VERSION:  0.3
 #       CREATED:  14/02/2020
 #      REVISION:  ---
 # =============================================================================
 
 # USAGE
-# python extract.py -f video_frame -p midia/main/1234/016-2017.mp4
-# python extract.py -f video_frame_crop -p midia/main/1234/016-2017.mp4
-# python extract.py -f stitch -p midia/main/1234/frame/016-2017
-# python extract.py -f cryptometry -p midia/main/1234/stitch100.tif
+# python extract.py -f video_frame -p midia/main/1234/016-2017EM-PRE.mp4
+# python extract.py -f cryptometry -p midia/main/1234/016-2017EM-PRE-TR.tif
 
 import cv2 as cv
 import numpy as np
 import subprocess
+import sys
 
 
 def dir_structure(path, dir_list):
     if not path.is_file():
         print(f"The path {str(path)} is not a valid file name! Exiting...")
-        import sys
         sys.exit()
     for dire in dir_list:
         path_dir = path.parents[0] / dire
@@ -66,7 +64,6 @@ def dir_exists(path):
         if option == "y":
             if not ("main" in str(path)):
                 print("Directory 'main' not found! Exiting...")
-                import sys
                 sys.exit()
             hierarchy = path.parts
             main_index = hierarchy.index("main")
@@ -79,7 +76,6 @@ def dir_exists(path):
             print(f"Directory {str(path)} was deleted!")
         else:
             print("Option unavailable! Exiting...")
-            import sys
             sys.exit()
 
 
@@ -100,7 +96,7 @@ def send_sandbox(path, dest_path):
     return key_sand
 
 
-def video_frame(source, crop=False):
+def video_frame(source):
     # Convert a video to frame images
     import pathlib
     path = pathlib.Path(source)
@@ -112,8 +108,6 @@ def video_frame(source, crop=False):
     while success:
         gray_frame = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
         image = remove_text(gray_frame)
-        if crop is True:
-            image = image[75:500, 75:500]
         cv.imwrite(f"{str(sub_dir)}/frame{count:03d}.png", image)
         success, image = vidcap.read()
         count += 1
@@ -127,15 +121,94 @@ def remove_text(image):
     return image
 
 
+def full_processing(image):
+    gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+    thresh = cv.threshold(
+        gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)[1]
+
+    contours_list, hierarchy = cv.findContours(
+        thresh, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
+    lista = []
+    MIN_AREA = 9000
+    MAX_AREA = 145000
+    for countour in contours_list:
+        area = cv.contourArea(countour)
+        if area > MIN_AREA and area < MAX_AREA:
+            lista.append(countour)
+
+    figure = np.zeros(image.shape[:-1], np.uint8)
+    draw_object(figure, lista)  # 1 All
+
+    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (2, 2))
+    morph_trans = cv.erode(thresh.copy(), kernel, iterations=12)
+
+    contours_list, hierarchy = cv.findContours(
+        morph_trans, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
+    lista = []
+    MIN_AREA = 9000
+    MAX_AREA = 145000
+    for countour in contours_list:
+        area = cv.contourArea(countour)
+        if area > MIN_AREA and area < MAX_AREA:
+            lista.append(countour)
+
+    draw_object(figure, lista)  # 2 Edge
+
+    morph_trans = cv.dilate(thresh.copy(), kernel, iterations=5)
+
+    contours_list, hierarchy = cv.findContours(
+        morph_trans, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
+    lista = []
+    MIN_AREA = 9000
+    MAX_AREA = 145000
+    for countour in contours_list:
+        area = cv.contourArea(countour)
+        if area > MIN_AREA and area < MAX_AREA:
+            lista.append(countour)
+
+    draw_object(figure, lista)  # 3 Center
+
+    erode = cv.erode(figure.copy(), kernel, iterations=13)
+    contours_list, hierarchy = cv.findContours(
+        erode, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
+    lista = []
+    MIN_AREA = 5000
+    MAX_AREA = 145000
+    for countour in contours_list:
+        area = cv.contourArea(countour)
+        if area > MIN_AREA and area < MAX_AREA:
+            lista.append(countour)
+
+    separed = np.zeros(image.shape[:-1], np.uint8)
+    draw_object(separed, lista)  # 4 Separed crypts
+
+    final = np.zeros(image.shape[:-1], np.uint8)
+
+    for crypt in lista:
+        hull = cv.convexHull(crypt)
+        ellipseB = cv.fitEllipse(hull)
+        cv.ellipse(final, ellipseB, (255), -1)
+
+    contours_list, hierarchy = cv.findContours(
+        final, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)  # 5 Estimated ellipses
+
+    print(f"Number of crypts assessed: {len(contours_list)}")
+    return contours_list
+
+
+def draw_object(image, crypts_list):
+    for crypt in crypts_list:
+        cv.drawContours(image, [crypt], -1, (255), -1)
+
+
 def low_processing(image):
     gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
     thresh = cv.threshold(
         gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)[1]
-    # TODO 1) Improve parameters to get a more precise crypt sizes
-    kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))
+    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (2, 2))
     dilate = cv.dilate(thresh, kernel, iterations=10)
-    erosion = cv.erode(dilate, kernel, iterations=10)
-    processed_image = erosion
+    morph_trans = cv.erode(dilate, kernel, iterations=15)
+    processed_image = morph_trans
     return processed_image
 
 
@@ -144,8 +217,8 @@ def segmentation(image):
     contours_list, hierarchy = cv.findContours(
         processed_image, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
     crypts_list = []
-    MIN_AREA = 10000
-    MAX_AREA = 310000
+    MIN_AREA = 9000
+    MAX_AREA = 145000
     for countour in contours_list:
         area = cv.contourArea(countour)
         if area > MIN_AREA and area < MAX_AREA:
@@ -157,60 +230,108 @@ def segmentation(image):
 def cryptometry(source):
     import pathlib
     path = pathlib.Path(source)
-    dir_list = ["fig", "plot"]
+    dir_list = ["fig", "plot", "data"]
     dir_structure(path, dir_list)
     print("Initialize cryptometry")
     image = cv.imread(source)
-    crypts_list = segmentation(image.copy())
-    draw_countours(image, crypts_list)
-    crypts_measures = []
     from timeit import default_timer as timer
-    time = []
+    print(f"Measures\t\t\t\t TIME(s)")
     start = timer()
-    crypts_measures.append(axis_ratio(image.copy(), crypts_list))
+    crypts_list = full_processing(image.copy())
+    draw_countours(image, crypts_list)
     end = timer()
-    time.append(end-start)
+    print(f"Segmentation and draw\t\t\t {end-start:.2f}")
     start = timer()
-    crypts_measures.extend(perimeter(image.copy(), crypts_list))
+    axis_ratio(image.copy(), crypts_list)
     end = timer()
-    time.append(end-start)
+    print(f"Axis ratio\t\t\t\t {end-start:.2f}")
     start = timer()
-    crypts_measures.extend(mean_distance(image.copy(), crypts_list))
+    perimeter(image.copy(), crypts_list)
     end = timer()
-    time.append(end-start)
+    print(f"Perimeter and Sphericity\t\t {end-start:.2f}")
     start = timer()
-    # crypts_measures.append(wall_thickness(image.copy(), crypts_list, 'H'))
-    crypts_measures.append(wall_thickness(image.copy(), crypts_list))
+    intercrypt_distance(image.copy(), crypts_list)
     end = timer()
-    time.append(end-start)
+    print(f"Mean and Minimal intercrypt distance\t {end-start:.2f}")
     start = timer()
-    # crypts_measures.append(maximal_feret(image.copy(), crypts_list, 'H'))
-    crypts_measures.append(maximal_feret(image.copy(), crypts_list))
+    wall_thickness(image.copy(), crypts_list)
+    # wall_thickness(image.copy(), crypts_list, 'H')
     end = timer()
-    time.append(end-start)
-    print("\nMeasures\t\t MEAN\t\t STD\t\t TIME(s)")
-    print(f"Axis ratio\t\t {crypts_measures[0][0]:.2f}\t\t "
-          f"{crypts_measures[0][1]:.2f}\t\t {time[0]:.2f}")
-    print(f"Perimeter(\u03BCm)\t\t {crypts_measures[1][0]:.2f}\t\t"
-          f" {crypts_measures[1][1]:.2f}\t\t {time[1]:.2f}")
-    print(f"Sphericity(%%)\t\t {crypts_measures[2][0]:.2f}\t\t "
-          f"{crypts_measures[2][1]:.2f}\t\t -")
-    print(f"Mean distance(\u03BCm)\t {crypts_measures[3][0]:.2f}\t\t "
-          f"{crypts_measures[3][1]:.2f}\t\t {time[2]:.2f}")
-    print(f"Min  distance(\u03BCm)\t {crypts_measures[4][0]:.2f}\t\t "
-          f"{crypts_measures[4][1]:.2f}\t\t -")
-    print(f"Wall Thickness(\u03BCm)\t {crypts_measures[5][0]:.2f}\t\t "
-          f"{crypts_measures[5][1]:.2f}\t\t {time[3]:.2f}")
-    print(f"Max Feret(\u03BCm)\t\t {crypts_measures[6][0]:.2f}\t\t "
-          f"{crypts_measures[6][1]:.2f}\t\t {time[4]:.2f}")
-    print("\nFinished cryptometry")
+    print(f"Wall Thickness\t\t\t\t {end-start:.2f}")
+    start = timer()
+    maximal_feret(image.copy(), crypts_list)
+    # maximal_feret(image.copy(), crypts_list, 'H')
+    end = timer()
+    print(f"Max Feret\t\t\t\t {end-start:.2f}")
+    start = timer()
+    elongation_factor(image.copy(), crypts_list)
+    end = timer()
+    print(f"Elongation factor\t\t\t {end-start:.2f}")
+    start = timer()
+    roundness(crypts_list)
+    end = timer()
+    print(f"Roundness\t\t\t\t {end-start:.2f}")
+    start = timer()
+    density(image.copy(), crypts_list)
+    end = timer()
+    print(f"Density\t\t\t\t\t {end-start:.2f} \nFinished cryptometry")
     for sub_dir in dir_list:
-        subprocess.run(f"mv -vn *{sub_dir}.jpg {str(path.parents[0] / sub_dir / path.stem)}",
-                       shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+        subprocess.run(f"mv -vn *_{sub_dir}* {str(path.parents[0] / sub_dir / path.stem)}", shell=True, stdout=subprocess.PIPE,
+                       stderr=subprocess.STDOUT, universal_newlines=True)
+
+
+def density(image, crypts_list):
+    crypts_img = np.zeros(image.shape[:-1], np.uint8)
+    for crypt in crypts_list:
+        cv.drawContours(crypts_img, [crypt], -1, (255),
+                        thickness=-1)
+    crypts_area = np.sum(crypts_img == 255)
+    processed_image = low_processing(image)
+    height = int(0.01 * processed_image.shape[0])
+    width = int(0.01 * processed_image.shape[1])
+    border = cv.copyMakeBorder(processed_image, top=height, bottom=height,
+                               left=width, right=width,
+                               borderType=cv.BORDER_CONSTANT, value=[255, 255,
+                                                                     255])
+    contours_list, hierarchy_list = cv.findContours(
+        border, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
+    background_img = np.zeros(border.shape, np.uint8)
+    for index, hierarchy in enumerate(hierarchy_list[0]):
+        if hierarchy[0] == -1 and hierarchy[3] == 0:
+            cv.drawContours(background_img, [contours_list[index]], -1, (255),
+                            thickness=-1)
+            break
+    background_area = np.sum(background_img == 255)
+    # print(crypts_area/background_area)  # >>> Criar CSV
+    return crypts_area/background_area
+
+
+def roundness(crypts_list):
+    roundness_list = []
+    for crypt in crypts_list:
+        area = cv.contourArea(crypt)
+        rect = cv.minAreaRect(crypt)
+        (x, y), (width, height), angle = rect
+        major_axis = max(width, height)
+        roundness_list.append((4*(area/(np.pi * (major_axis ** 2))))*100)
+    to_csv(roundness_list, ["round", "Crypts roundness", "", "Roundness (%)"])
+
+
+def elongation_factor(image, crypts_list):
+    elongation_list = []
+    for crypt in crypts_list:
+        rect = cv.minAreaRect(crypt)
+        box = cv.boxPoints(rect)
+        box = np.int0(box)
+        (x, y), (width, height), angle = rect
+        elongation_list.append(max(width, height)/min(width, height))
+        cv.drawContours(image, [box], 0, (0, 0, 255), 3)
+    cv.imwrite("elong_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
+    to_csv(elongation_list, ["elong", "Elongation factor", "", "Ratio"])
 
 
 def neighbors(crypts_list):
-    MAX_DIST = 735
+    MAX_DIST = 700
     neighbors_list = [[] for crypt in range(len(crypts_list))]
     center_list = get_center(crypts_list)
     for crypt_index, first_center in enumerate(center_list):
@@ -263,14 +384,17 @@ def maximal_feret(image, crypts_list, algorithm='B'):
                 feret_diameters.append(y_distance)
     cv.imwrite("feret_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
     feret_diameters = pixel_micrometer(feret_diameters)
-    return np.mean(feret_diameters), np.std(feret_diameters)
+    to_csv(feret_diameters, ["feret",
+                             "Maximal feret diameter", "", "Diameter (\u03BCm)"])
 
 
 def wall_thickness(image, crypts_list, algorithm='B'):
-    MAX_DIST = 735
+    MAX_DIST = 700
     wall_list = [0] * len(crypts_list)
     neighbors_list = neighbors(crypts_list)
     for crypt_index, crypt in enumerate(crypts_list):
+        if len(neighbors_list[crypt_index]) == 0:
+            continue
         min_wall = MAX_DIST
         wall_crypt_point = [0]
         wall_neighbor_point = [0]
@@ -291,7 +415,7 @@ def wall_thickness(image, crypts_list, algorithm='B'):
                 crypt_center = center_list[crypt_index]
                 neighbor_center = center_list[neighbor[0]]
                 slope = ((neighbor_center[1] - crypt_center[1]) /
-                         (neighbor_center[0] - crypt_center[0]))
+                         (neighbor_center[0] - crypt_center[0])) if (neighbor_center[0] - crypt_center[0]) != 0 else 0
                 crypt_wall = []
                 for crypt_point in crypt:
                     if collinear(slope, crypt_center, crypt_point[0]):
@@ -316,12 +440,16 @@ def wall_thickness(image, crypts_list, algorithm='B'):
             wall_neighbor_point[0]), (0, 0, 255), 3)
     cv.imwrite("wall_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
     wall_list = pixel_micrometer(wall_list)
-    return np.mean(wall_list), np.std(wall_list)
+    to_csv(wall_list, ["wall",
+                       "Wall thickness", "", "Distance (\u03BCm)"])
 
 
 def between_points(slope, first_point, second_point, mid_point):
     import math
-    return math.isclose((distance(first_point, mid_point)+distance(mid_point, second_point)), distance(first_point, second_point), abs_tol=abs(slope))
+    left = distance(first_point, mid_point)
+    right = distance(mid_point, second_point)
+    link = distance(first_point, second_point)
+    return math.isclose(left+right, link, abs_tol=abs(slope))
 
 
 def collinear(slope, first_point, collinear_point):
@@ -331,12 +459,12 @@ def collinear(slope, first_point, collinear_point):
     return math.isclose(equation, collinear_point[1], abs_tol=(abs(slope))+1)
 
 
-def mean_distance(image, crypts_list):
-    MAX_DIST = 735
+def intercrypt_distance(image, crypts_list):
+    MAX_DIST = 700
     center_list = get_center(crypts_list)
     for center in center_list:
         cv.circle(image,  (center), 7, (0, 0, 255), -1)
-    mean_dist_list = []
+    intercrypt_list = []
     min_dist_list = []
     neighbors_list = neighbors(crypts_list)
     for index, first_center in enumerate(center_list):
@@ -345,14 +473,17 @@ def mean_distance(image, crypts_list):
             second_center = center_list[neighbor[0]]
             cv.line(image, first_center, second_center,
                     (0, 0, 255), thickness=3)
-            mean_dist_list.append(neighbor[1])
+            intercrypt_list.append(neighbor[1])
             if neighbor[1] < min_dist:
                 min_dist = neighbor[1]
         min_dist_list.append(min_dist)
     cv.imwrite("dist_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
-    mean_dist_list = pixel_micrometer(mean_dist_list)
+    intercrypt_list = pixel_micrometer(intercrypt_list)
+    to_csv(intercrypt_list, ["dist",
+                             "Intercrypt distance", "", "Distance (\u03BCm)"])
     min_dist_list = pixel_micrometer(min_dist_list)
-    return [np.mean(mean_dist_list), np.std(mean_dist_list)], [np.mean(min_dist_list), np.std(min_dist_list)]
+    to_csv(min_dist_list, ["min_dist",
+                           "Minimal intercrypt distance", "", "Distance (\u03BCm)"])
 
 
 def distance(first_point, second_point):
@@ -370,64 +501,24 @@ def get_center(crypts_list):
 
 
 def perimeter(image, crypts_list):
-    import seaborn as sns
-    import matplotlib.pyplot as plt
-    # Define style plots
-    sns.set(context='notebook', style='ticks', font='Arial', font_scale=2, rc={
-        'axes.grid': True, 'grid.linestyle': 'dashed', 'lines.linewidth': 2, 'xtick.direction': 'in', 'ytick.direction': 'in', 'figure.figsize': (7, 3.09017)})  # (1.4, 0.618034)
-    sns.set_palette(palette='bright')
     perim_list = []
     spher_list = []
     for crypt in crypts_list:
         perimeter = cv.arcLength(crypt, True)
         perim_list.append(perimeter)
         area = cv.contourArea(crypt)
-        spher_list.append((4 * np.pi * area) / (perimeter ** 2))
-        # epsilon = 0.007 * cv.arcLength(cont, True)
-        # approx = cv.approxPolyDP(cont, epsilon, True)
-        # cv.drawContours(image, [approx], -1, (0, 255, 0), 3)
+        spher_list.append((4 * np.pi * area) / (perimeter ** 2)*100)
     cv.imwrite("perim_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
     perim_list = pixel_micrometer(perim_list)
-    # PLOT
-    data = perim_list
-    # BOXPLOT
-    boxplot = sns.boxplot(y=data, width=0.25)
-    # TODO manter frequência de linhas de grade e espaçar frequência de números
-    # boxplot.yaxis.set_major_locator(ticker.MultipleLocator(0.05))
-    # boxplot.yaxis.set_major_formatter(ticker.ScalarFormatter())
-    fig1 = boxplot.get_figure()
-    # plt.title("Crypt axis ratio boxplot")
-    # plt.ylabel("Axis ratio")
-    fig1.savefig("perim_box_plot.jpg", dpi=300, bbox_inches="tight")
-    # plt.show(boxplot)
-    plt.clf()
-    # DISTRIBUTION
-    distribution = sns.distplot(data)  # bin: freedman-diaconis
-    # distribution.xaxis.set_major_locator(ticker.MultipleLocator(0.2))
-    # distribution.xaxis.set_major_formatter(ticker.ScalarFormatter())
-    # distribution.yaxis.set_major_locator(ticker.MultipleLocator(1))
-    # distribution.yaxis.set_major_formatter(ticker.ScalarFormatter())
-    fig2 = distribution.get_figure()
-    plt.title("Perimeter distribution")
-    plt.ylabel("Density")
-    plt.xlabel("Perimeter (\u03BCm)")
-    fig2.savefig("perim_dist_plot.jpg", dpi=300, bbox_inches="tight")
-    # plt.show(distribution)
-    plt.clf()
-    return [np.mean(perim_list), np.std(perim_list)], [np.mean(spher_list)*100, np.std(spher_list)*100]
+    to_csv(perim_list, ["perim", "Crypts Perimeter",
+                        "", "Perimeter (\u03BCm)"])
+    to_csv(spher_list, ["spher", "Crypts sphericity", "", "Sphericity (%)"])
 
 
 def axis_ratio(image, crypts_list):
     # Ratio between major and minor axis (Ma/ma ratio)
     # Give the mean and standard deviation of the ratio between the width and
     # the heigth of the box containing the crypt
-    import seaborn as sns
-    import matplotlib.pyplot as plt
-    import matplotlib.ticker as ticker
-    # Define style plots
-    sns.set(context='notebook', style='ticks', font='Arial', font_scale=2, rc={
-        'axes.grid': True, 'grid.linestyle': 'dashed', 'lines.linewidth': 2, 'xtick.direction': 'in', 'ytick.direction': 'in', 'figure.figsize': (7, 3.09017)})  # (1.4, 0.618034)
-    sns.set_palette(palette='bright')
     mama_list = []
     for crypt in crypts_list:
         x, y, width, heigth = cv.boundingRect(crypt)
@@ -437,66 +528,34 @@ def axis_ratio(image, crypts_list):
             mama_list.append(heigth/width)
         cv.rectangle(image, (x, y), (x + width, y + heigth), (0, 0, 255), 3)
     cv.imwrite("axisr_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
-    # PLOT
-    data = mama_list
-    # BOXPLOT
-    boxplot = sns.boxplot(y=data, width=0.25)
-    # TODO manter frequência de linhas de grade e espaçar frequência de números
-    boxplot.yaxis.set_major_locator(ticker.MultipleLocator(0.05))
-    boxplot.yaxis.set_major_formatter(ticker.ScalarFormatter())
-    fig1 = boxplot.get_figure()
-    plt.title("Crypt axis ratio boxplot")
-    plt.ylabel("Axis ratio")
-    fig1.savefig("axis_box_plot.jpg", dpi=300, bbox_inches="tight")
-    # plt.show(boxplot)
-    plt.clf()
-    # DISTRIBUTION
-    distribution = sns.distplot(data)  # bin: freedman-diaconis
-    distribution.xaxis.set_major_locator(ticker.MultipleLocator(0.2))
-    distribution.xaxis.set_major_formatter(ticker.ScalarFormatter())
-    distribution.yaxis.set_major_locator(ticker.MultipleLocator(1))
-    distribution.yaxis.set_major_formatter(ticker.ScalarFormatter())
-    fig2 = distribution.get_figure()
-    plt.title("Crypt axis ratio distribution")
-    plt.ylabel("Density")
-    plt.xlabel("Axis ratio")
-    fig2.savefig("axis_dist_plot.jpg", dpi=300, bbox_inches="tight")
-    # plt.show(distribution)
-    plt.clf()
-    return np.mean(mama_list), np.std(mama_list)
+    to_csv(mama_list, ["axisr", "Axis Ratio", "", "Ratio"])
 
 
-def pixel_micrometer(value_pixel, is_list=True):
-    # 51 pixels correspond to 20 micrometers
-    PIXEL = 51
-    MICROMETER = 20
+def pixel_micrometer(value_pixel, ratio=(51, 20), is_list=True):
+    # 51 pixels correspond to 20 micrometers by default
+    PIXEL = ratio[0]
+    MICROMETER = ratio[1]
     if is_list:
         value_micrometer = []
         for value in value_pixel:
-            value_micrometer.append((MICROMETER * value) / PIXEL)
+            value_micrometer.append((MICROMETER * int(value)) / PIXEL)
         return value_micrometer
     else:
         return (MICROMETER * value_pixel) / PIXEL
 
 
+def to_csv(data, labels):
+    import csv
+    with open(f"{labels[0]}_data.csv", mode='w') as csv_file:
+        writer = csv.writer(csv_file, delimiter=',',
+                            quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        writer.writerow(labels)
+        writer.writerow(data)
+
+
 def draw_countours(image, crypts_list):
     for crypt in crypts_list:
-        cv.drawContours(image, crypt, -1, (0, 0, 255), 3)
-
-# def stitch_stack(source):
-#     # Stitch frame images to do a mosaic
-#     list_images = sorted(os.listdir(source))
-#     images = []
-#     for image_name in list_images:
-#         image = cv.imread(source+'/'+image_name)
-#         images.append(image)
-#         stitcher = cv.Stitcher.create(cv.Stitcher_SCANS)
-#         status, pano = stitcher.stitch(images)
-#     if status != cv.Stitcher_OK:
-#         print(f"Can't stitch images, error code = {status}")
-#         sys.exit(-1)
-#         cv.imwrite("teste.png", pano)
-#         print("stitching completed successfully.")
+        cv.drawContours(image, crypt, -1, (0, 0, 255), 6)
 
 
 def main():
@@ -513,8 +572,6 @@ def main():
         video_frame(source)
     elif (function == "video_frame_crop"):
         video_frame(source, True)
-    # elif (function == "stitch"):
-    #     stitch_stack(source)
     elif (function == "cryptometry"):
         cryptometry(source)
     else:
@@ -522,4 +579,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import timeit
+    repetitions = 1
+    print(
+        f"Mean time elapsed {timeit.timeit(main, number=repetitions)/repetitions:.2f}s"
+        f" in {repetitions} executions")
