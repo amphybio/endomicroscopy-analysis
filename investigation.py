@@ -30,12 +30,12 @@
 # =============================================================================
 
 # USAGE
-# python plot.py -f box_plot -p midia/main/1234/data/stitch100/axisr_data.csv
-# python plot.py -f box_plot -p midia/main/1234/data/stitch100/spher_data.csv -o 0
-# python plot.py -f hist_plot -p midia/main/BKP/data/AB/axisr_data.csv
-# python plot.py -f distb_dist -p midia/main/BKP/data/AB/axisr_data.csv
-# python plot.py -f all_csv -p midia/main/1234/data/stitch100/
-# python plot.py -f join_csv -p midia/main/1234/data/ -o axis
+# python investigation.py -f box_plot -p midia/main/1234/data/stitch100/axisr_data.csv
+# python investigation.py -f box_plot -p midia/main/1234/data/stitch100/spher_data.csv -o 0
+# python investigation.py -f hist_plot -p midia/main/BKP/data/AB/axisr_data.csv
+# python investigation.py -f distb_dist -p midia/main/BKP/data/AB/axisr_data.csv
+# python investigation.py -f all_csv -p midia/main/1234/data/stitch100/
+# python investigation.py -f join_csv -p midia/main/1234/data/ -o axis
 
 
 import csv
@@ -86,15 +86,18 @@ def distribution_distance(data):
                   for arr in data[1:]]
     for index, first_distribution in enumerate(data_float):
         p = first_distribution / np.asarray(first_distribution).sum()
+        print(
+            f"Image: {data[index+1][0]}"
+            f"\nShannon entropy: {shannon_entropy(p):.3f}\n+++++++++++++++")
         p = np.asarray(p[:19])  # CHUMBADO
-        # p = np.asarray(p[24:])  # CHUMBADO
-        print(f"{data[index+1][0]}\n+++++++++++++++")
         for compare, second_distribution in enumerate(data_float[index+1:]):
-            print(f"{data[index+2+compare][0]}")
+            print(f"Image: {data[index+2+compare][0]}")
             q = second_distribution / np.asarray(second_distribution).sum()
-            print(f"Hellinger:\t {hellinger_distance(p,q)}"
-                  f"\nJensen-Shannon:\t {jensen_shannon_distance(p,q)}"
-                  f"\nBhattacharyya:\t {bhattacharyya_distance(p,q)}\n---------------")
+            print(f"Hellinger:\t {hellinger_distance(p,q):.3f}"
+                  f"\nBhattacharyya:\t {bhattacharyya_distance(p,q):.3f}"
+                  f"\nKullbackLeibler:{kullback_leibler_divergence(p,q):.3f}"
+                  f"\nJensen-Shannon:\t {jensen_shannon_distance(p,q):.3f}"
+                  "\n---------------")
 
 
 def hellinger_distance(p, q):
@@ -113,31 +116,11 @@ def jensen_shannon_distance(p, q):
 
 
 def kullback_leibler_divergence(p, q):
-    return np.sum(p*np.log2((p/q)))
+    return np.sum(p*np.log2(p/q))
 
 
-def shannon_entropy(data):
-    p = data / np.asarray(data).sum()
+def shannon_entropy(p):
     return -np.sum(p*np.log2(p))
-
-
-def freq_plot(data):
-    sorted_set = natural_sort(list(set(data)))
-    ax = sns.barplot(x=data, y=data, estimator=lambda x: len(
-        x) / len(data) * 100, palette=["C0"], order=sorted_set)
-    ax.set(xlabel="Classes",
-           ylabel="Frequency (%)")
-    ax.yaxis.set_major_locator(ticker.MultipleLocator(5))
-    ax.yaxis.set_major_formatter(ticker.ScalarFormatter())
-    plot = ax.get_figure()
-    plot.canvas.draw()
-    for label in ax.get_yticklabels():
-        if int(label.get_text().replace('−', '-')) % 10 == 0:
-            label.set_visible(True)
-        else:
-            label.set_visible(False)
-    plot.savefig(f"{data[0][0]}_plot.tif", dpi=600, bbox_inches="tight")
-    plt.clf()
 
 
 def hist_plot(data, ticks_number=[13, 7], decimals=[0, 2]):
@@ -195,14 +178,6 @@ def box_plot(data, ticks_number=10, decimals=1):
             label.set_visible(False)
     plot.savefig(f"{data[0][0]}_plot.tif", dpi=600, bbox_inches="tight")
     plt.clf()
-
-
-def natural_sort(l):
-    import re
-    def convert(text): return int(text) if text.isdigit() else text.lower()
-    def alphanum_key(key): return [convert(c)
-                                   for c in re.split('([0-9]+)', key)]
-    return sorted(l, key=alphanum_key)
 
 
 def main():
