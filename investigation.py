@@ -81,6 +81,58 @@ def join_csv(source, data):
     # combined_csv.to_csv("combined_csv.csv", index=False, encoding='utf-8-sig')
 
 
+def hist_dist(data, ticks_number=[8, 7], decimals=[0, 3]):
+    data_float = [np.asarray(list(filter(None, arr[1:])), dtype=np.float)
+                  for arr in data[1:]]
+    X_MAX = max(map(max, data_float))
+    X_MIN = min(map(min, data_float))
+    x_interval = np.round((X_MAX - X_MIN) / ticks_number[0], decimals[0])
+    x_ticks = np.round(
+        np.arange(X_MIN, X_MAX+x_interval, x_interval), decimals[0])
+    fig, ax = plt.subplots(1)
+    densities = [0]
+    for index, img_data in enumerate(data_float):
+        densities.append(ax.hist(img_data, density=True, bins=x_ticks,
+                                 alpha=.85, label=data[index+1][0])[0])
+    densities = densities[1:]
+    p = densities[0] / np.asarray(densities[0]).sum()
+    q = densities[1] / np.asarray(densities[1]).sum()
+    from scipy.stats import wasserstein_distance
+    # from scipy.stats import entropy
+    # print("SCIPY:", entropy(p, q, 2))
+    print(
+        f"\nHellinger Coef:\t\t{hellinger_coefficient(p,q):.3f}"
+        f"\nHellinger Dist:\t\t{hellinger_distance(p,q):.3f}"
+        f"\nJeffreys Dist:\t\t{jeffreys_distance(p,q):.3f}"
+        f"\nKullback Div:\t\t{kullback_leibler_divergence(p,q):.3f}"
+        f"\nSym Kullback Div:\t{symmetric_kullback_divergence(p,q):.3f}"
+        "\n---------------"
+        f"\nBhattacharyya Dist:\t{bhattacharyya_distance(p,q):.3f}"
+        f"\nWasserstein Dist:\t{wasserstein_distance(p, q):.3f}"
+        f"\nJensen-Shannon Dist:\t{jensen_shannon_distance(p,q):.3f}"
+        "\n---------------")
+    # quit()
+    Y_MAX = max(map(max, densities))
+    Y_MIN = min(map(min, densities))
+    y_interval = np.round((Y_MAX - Y_MIN) / ticks_number[1], decimals[1])
+    y_ticks = np.round(
+        np.arange(Y_MIN, Y_MAX+y_interval, y_interval), decimals[1])
+    ax.set(title=data[0][1], ylabel="Density",
+           xlabel=data[0][3], xticks=x_ticks, yticks=y_ticks)
+    # Optional line | IF decimals 0 >> astype(np.int)
+    ax.set_xticklabels(ax.get_xticks().astype(np.int), size=16)
+    plt.legend(loc='upper left', prop={'size': 12})
+    plot = ax.get_figure()
+    plot.canvas.draw()
+    for index, label in enumerate(ax.get_yticklabels()):
+        if index % 2 == 1:
+            label.set_visible(True)
+        else:
+            label.set_visible(False)
+    plt.savefig(f"{data[0][0]}_plot.tif", dpi=600, bbox_inches="tight")
+    plt.clf()
+
+
 def distribution_distance(data):
     data_float = [np.asarray(list(filter(None, arr[1:])), dtype=np.float)
                   for arr in data[1:]]
@@ -100,27 +152,42 @@ def distribution_distance(data):
                   "\n---------------")
 
 
-def hellinger_distance(p, q):
-    return np.sqrt(np.sum((np.sqrt(p) - np.sqrt(q)) ** 2)) / np.sqrt(2)
+def shannon_entropy(p):
+    return -np.sum(p*np.log2(p))
 
 
-def bhattacharyya_distance(p, q):
-    return -np.log(np.sum(np.sqrt(p*q)))
+def hellinger_coefficient(p, q):
+    return np.sum(np.sqrt(p*q))
 
 
-def jensen_shannon_distance(p, q):
-    m = (p+q)/2
-    left = kullback_leibler_divergence(p, m)
-    right = kullback_leibler_divergence(q, m)
-    return np.sqrt((left+right)/2)
+def jeffreys_distance(p, q):
+    return np.sum((np.sqrt(p) - np.sqrt(q))**2)
 
 
 def kullback_leibler_divergence(p, q):
     return np.sum(p*np.log2(p/q))
 
 
-def shannon_entropy(p):
-    return -np.sum(p*np.log2(p))
+def symmetric_kullback_divergence(p, q):
+    left = kullback_leibler_divergence(p, q)
+    right = kullback_leibler_divergence(q, p)
+    return left+right
+
+
+def bhattacharyya_distance(p, q):
+    return -np.log(hellinger_coefficient(p, q))
+
+
+def hellinger_distance(p, q):
+    return np.sqrt(1-hellinger_coefficient(p, q))
+
+
+def jensen_shannon_distance(p, q):
+    m = (p+q)/2
+    left = kullback_leibler_divergence(p, m)
+    right = kullback_leibler_divergence(q, m)
+    jensen_shannon_divergence = (left+right)/2
+    return np.sqrt(jensen_shannon_divergence)
 
 
 def hist_plot(data, ticks_number=[13, 7], decimals=[0, 2]):
@@ -210,7 +277,8 @@ def main():
         join_csv(source, data)
     elif (function == "distb_dist"):
         data = read_csv(source)
-        distribution_distance(data)
+        # distribution_distance(data)
+        hist_dist(data)
     else:
         print("Undefined function")
 
