@@ -14,7 +14,7 @@
 #   along with program.  If not, see <http://www.gnu.org/licenses/>.
 
 # =============================================================================
-#          FILE: crypt-plot.py
+#          FILE: investigation.py
 #
 #   DESCRIPTION: Program to generate plots based on file output of
 #                Endomicroscopy morphometry analysis
@@ -97,9 +97,11 @@ def hist_dist(data, ticks_number=[8, 7], decimals=[0, 3]):
     densities = densities[1:]
     p = densities[0] / np.asarray(densities[0]).sum()
     q = densities[1] / np.asarray(densities[1]).sum()
+    # areas = np.array(densities) * x_interval
+    # p = areas[0] / np.asarray(areas[0]).sum()
+    # q = areas[1] / np.asarray(areas[1]).sum()
     from scipy.stats import wasserstein_distance
-    # from scipy.stats import entropy
-    # print("SCIPY:", entropy(p, q, 2))
+    from scipy.stats import energy_distance
     print(
         f"\nHellinger Coef:\t\t{hellinger_coefficient(p,q):.3f}"
         f"\nHellinger Dist:\t\t{hellinger_distance(p,q):.3f}"
@@ -109,6 +111,7 @@ def hist_dist(data, ticks_number=[8, 7], decimals=[0, 3]):
         "\n---------------"
         f"\nBhattacharyya Dist:\t{bhattacharyya_distance(p,q):.3f}"
         f"\nWasserstein Dist:\t{wasserstein_distance(p, q):.3f}"
+        f"\nEnergy Dist:\t\t{energy_distance(p, q):.3f}"
         f"\nJensen-Shannon Dist:\t{jensen_shannon_distance(p,q):.3f}"
         "\n---------------")
     # quit()
@@ -131,25 +134,6 @@ def hist_dist(data, ticks_number=[8, 7], decimals=[0, 3]):
             label.set_visible(False)
     plt.savefig(f"{data[0][0]}_plot.tif", dpi=600, bbox_inches="tight")
     plt.clf()
-
-
-def distribution_distance(data):
-    data_float = [np.asarray(list(filter(None, arr[1:])), dtype=np.float)
-                  for arr in data[1:]]
-    for index, first_distribution in enumerate(data_float):
-        p = first_distribution / np.asarray(first_distribution).sum()
-        print(
-            f"Image: {data[index+1][0]}"
-            f"\nShannon entropy: {shannon_entropy(p):.3f}\n+++++++++++++++")
-        p = np.asarray(p[:19])  # CHUMBADO
-        for compare, second_distribution in enumerate(data_float[index+1:]):
-            print(f"Image: {data[index+2+compare][0]}")
-            q = second_distribution / np.asarray(second_distribution).sum()
-            print(f"Hellinger:\t {hellinger_distance(p,q):.3f}"
-                  f"\nBhattacharyya:\t {bhattacharyya_distance(p,q):.3f}"
-                  f"\nKullbackLeibler:{kullback_leibler_divergence(p,q):.3f}"
-                  f"\nJensen-Shannon:\t {jensen_shannon_distance(p,q):.3f}"
-                  "\n---------------")
 
 
 def shannon_entropy(p):
