@@ -35,6 +35,7 @@
 # python investigation.py -f hist_plot -p midia/main/BKP/data/AB/axisr_data.csv
 # python investigation.py -f distb_dist -p midia/main/BKP/data/AB/axisr_data.csv
 # python investigation.py -f all_csv -p midia/main/1234/data/stitch100/
+# python investigation.py -f summary -p midia/main/1234/data/016-2017EM-PRE-TR-0-302/
 # python investigation.py -f join_csv -p midia/main/1234/data/ -o axis
 
 
@@ -59,6 +60,14 @@ def read_csv(data_source):
     return data
 
 
+def to_csv(data, name):
+    with open(f"{name}.csv", mode='w') as csv_file:
+        writer = csv.writer(csv_file, delimiter=',',
+                            quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        for row in data:
+            writer.writerow(row)
+
+
 def all_csv(source):
     import subprocess
     csv_files = subprocess.run(f"ls -1v {source}*csv", shell=True,  stdout=subprocess.PIPE,
@@ -67,6 +76,21 @@ def all_csv(source):
         data = read_csv(path)
         box_plot(data)
         print(path)
+
+
+def summary_stats(source):
+    import subprocess
+    csv_files = subprocess.run(f"ls -1v {source}*csv", shell=True,  stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT, universal_newlines=True)
+    data_export = [["Parameter", "Mean", "STD"]]
+    for path in csv_files.stdout.splitlines():
+        data = read_csv(path)
+        data_float = [np.asarray(
+            list(filter(None, arr[1:])), dtype=np.float) for arr in data[1:]]
+        data_export.append(
+            [data[0][1], np.mean(data_float), np.std(data_float)])
+    print(data_export)
+    to_csv(data_export, "summary")
 
 
 def join_csv(source, data):
@@ -105,9 +129,11 @@ def hist_dist(data, ticks_number=[8, 7], decimals=[0, 3]):
     print(
         f"\nHellinger Coef:\t\t{hellinger_coefficient(p,q):.3f}"
         f"\nHellinger Dist:\t\t{hellinger_distance(p,q):.3f}"
+        # f"\nHellinger E Dist:\t{hellinger_e_distance(p,q):.3f}"
         f"\nJeffreys Dist:\t\t{jeffreys_distance(p,q):.3f}"
         f"\nKullback Div:\t\t{kullback_leibler_divergence(p,q):.3f}"
-        f"\nSym Kullback Div:\t{symmetric_kullback_divergence(p,q):.3f}"
+        f"\nKullbakc Dist:\t\t{jeffrey_divergence(p,q):.3f}"
+        # f"\nJ Div:\t\t\t{jeffrey_e_divergence(p,q):.3f}"
         "\n---------------"
         f"\nBhattacharyya Dist:\t{bhattacharyya_distance(p,q):.3f}"
         f"\nWasserstein Dist:\t{wasserstein_distance(p, q):.3f}"
@@ -140,10 +166,6 @@ def shannon_entropy(p):
     return -np.sum(p*np.log2(p))
 
 
-def hellinger_coefficient(p, q):
-    return np.sum(np.sqrt(p*q))
-
-
 def jeffreys_distance(p, q):
     return np.sum((np.sqrt(p) - np.sqrt(q))**2)
 
@@ -152,10 +174,18 @@ def kullback_leibler_divergence(p, q):
     return np.sum(p*np.log2(p/q))
 
 
-def symmetric_kullback_divergence(p, q):
+def jeffrey_divergence(p, q):
     left = kullback_leibler_divergence(p, q)
     right = kullback_leibler_divergence(q, p)
     return left+right
+
+
+def jeffrey_e_divergence(p, q):
+    return np.sum((p-q)*np.log2(p/q))
+
+
+def hellinger_coefficient(p, q):
+    return np.sum(np.sqrt(p*q))
 
 
 def bhattacharyya_distance(p, q):
@@ -166,11 +196,15 @@ def hellinger_distance(p, q):
     return np.sqrt(1-hellinger_coefficient(p, q))
 
 
-def jensen_shannon_distance(p, q):
-    m = (p+q)/2
+def hellinger_e_distance(p, q):
+    return np.sqrt(np.sum((np.sqrt(p) - np.sqrt(q)) ** 2)) / np.sqrt(2)
+
+
+def jensen_shannon_distance(p, q, a=0.5):
+    m = a * p + (1 - a) * q
     left = kullback_leibler_divergence(p, m)
     right = kullback_leibler_divergence(q, m)
-    jensen_shannon_divergence = (left+right)/2
+    jensen_shannon_divergence = a*left + (1 - a)*right
     return np.sqrt(jensen_shannon_divergence)
 
 
@@ -263,6 +297,8 @@ def main():
         data = read_csv(source)
         # distribution_distance(data)
         hist_dist(data)
+    elif (function == "summary"):
+        summary_stats(source)
     else:
         print("Undefined function")
 
