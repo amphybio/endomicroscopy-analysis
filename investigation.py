@@ -121,6 +121,8 @@ def hist_dist(data, ticks_number=[8, 7], decimals=[0, 3]):
     densities = densities[1:]
     p = densities[0] / np.asarray(densities[0]).sum()
     q = densities[1] / np.asarray(densities[1]).sum()
+    print(p)
+    print(q)
     from scipy.stats import wasserstein_distance
     print(
         f"\nShannon(p):\t\t{shannon_entropy(p):.3f} "
@@ -160,7 +162,7 @@ def hist_dist(data, ticks_number=[8, 7], decimals=[0, 3]):
 
 
 def shannon_entropy(p):
-    return -np.sum(p*np.log2(p))
+    return -np.sum(np.where(p != 0, p*np.log2(p), 0))
 
 
 def jeffreys_distance(p, q):
