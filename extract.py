@@ -34,7 +34,7 @@
 
 # USAGE
 # python extract.py -f video_frame -p midia/main/1234/016-2017EM-PRE.mp4
-# python extract.py -f cryptometry -p midia/main/1234/016-2017EM-PRE-TR.tif
+# python extract.py -f cryptometry -p midia/main/1234/016-2017EM-PRE-0-302TR.tif
 
 import cv2 as cv
 import numpy as np
@@ -140,7 +140,7 @@ def full_processing(image):
     draw_object(figure, lista)  # 1 All
 
     kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (2, 2))
-    morph_trans = cv.erode(thresh.copy(), kernel, iterations=12)
+    morph_trans = cv.erode(thresh.copy(), kernel, iterations=17)
 
     contours_list, hierarchy = cv.findContours(
         morph_trans, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
@@ -168,7 +168,7 @@ def full_processing(image):
 
     draw_object(figure, lista)  # 3 Center
 
-    erode = cv.erode(figure.copy(), kernel, iterations=13)
+    erode = cv.erode(figure.copy(), kernel, iterations=14)
     contours_list, hierarchy = cv.findContours(
         erode, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
     lista = []
@@ -235,7 +235,7 @@ def cryptometry(source):
     print("Initialize cryptometry")
     image = cv.imread(source)
     from timeit import default_timer as timer
-    print(f"Measures\t\t\t\t TIME(s)")
+    print("Measures\t\t\t\t TIME(s)")
     start = timer()
     crypts_list = full_processing(image.copy())
     draw_countours(image, crypts_list)

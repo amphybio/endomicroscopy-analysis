@@ -35,7 +35,7 @@
 # python investigation.py -f hist_plot -p midia/main/BKP/data/AB/axisr_data.csv
 # python investigation.py -f distb_dist -p midia/main/BKP/data/AB/axisr_data.csv
 # python investigation.py -f all_csv -p midia/main/1234/data/stitch100/
-# python investigation.py -f summary -p midia/main/1234/data/016-2017EM-PRE-TR-0-302/
+# python investigation.py -f summary -p midia/main/1234/data/016-2017EM-PRE-0-302TR/
 # python investigation.py -f join_csv -p midia/main/1234/data/ -o axis
 
 
@@ -121,12 +121,10 @@ def hist_dist(data, ticks_number=[8, 7], decimals=[0, 3]):
     densities = densities[1:]
     p = densities[0] / np.asarray(densities[0]).sum()
     q = densities[1] / np.asarray(densities[1]).sum()
-    # areas = np.array(densities) * x_interval
-    # p = areas[0] / np.asarray(areas[0]).sum()
-    # q = areas[1] / np.asarray(areas[1]).sum()
     from scipy.stats import wasserstein_distance
-    from scipy.stats import energy_distance
     print(
+        f"\nShannon(p):\t\t{shannon_entropy(p):.3f} "
+        f"\nShannon(q):\t\t{shannon_entropy(q):.3f} "
         f"\nHellinger Coef:\t\t{hellinger_coefficient(p,q):.3f}"
         f"\nHellinger Dist:\t\t{hellinger_distance(p,q):.3f}"
         # f"\nHellinger E Dist:\t{hellinger_e_distance(p,q):.3f}"
@@ -137,7 +135,6 @@ def hist_dist(data, ticks_number=[8, 7], decimals=[0, 3]):
         "\n---------------"
         f"\nBhattacharyya Dist:\t{bhattacharyya_distance(p,q):.3f}"
         f"\nWasserstein Dist:\t{wasserstein_distance(p, q):.3f}"
-        f"\nEnergy Dist:\t\t{energy_distance(p, q):.3f}"
         f"\nJensen-Shannon Dist:\t{jensen_shannon_distance(p,q):.3f}"
         "\n---------------")
     # quit()
