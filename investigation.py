@@ -105,7 +105,7 @@ def join_csv(source, data):
     # combined_csv.to_csv("combined_csv.csv", index=False, encoding='utf-8-sig')
 
 
-def hist_dist(data, ticks_number=[8, 7], decimals=[0, 3]):
+def hist_dist(data, ticks_number=[5, 7], decimals=[0, 3]):
     data_float = [np.asarray(list(filter(None, arr[1:])), dtype=np.float)
                   for arr in data[1:]]
     X_MAX = max(map(max, data_float))
@@ -121,8 +121,6 @@ def hist_dist(data, ticks_number=[8, 7], decimals=[0, 3]):
     densities = densities[1:]
     p = densities[0] / np.asarray(densities[0]).sum()
     q = densities[1] / np.asarray(densities[1]).sum()
-    print(p)
-    print(q)
     from scipy.stats import wasserstein_distance
     print(
         f"\nShannon(p):\t\t{shannon_entropy(p):.3f} "
@@ -148,8 +146,8 @@ def hist_dist(data, ticks_number=[8, 7], decimals=[0, 3]):
     ax.set(title=data[0][1], ylabel="Density",
            xlabel=data[0][3], xticks=x_ticks, yticks=y_ticks)
     # Optional line | IF decimals 0 >> astype(np.int)
-    ax.set_xticklabels(ax.get_xticks().astype(np.int), size=16)
-    plt.legend(loc='upper left', prop={'size': 12})
+    ax.set_xticklabels(ax.get_xticks().astype(int), size=17)
+    plt.legend(loc='upper right', prop={'size': 12})
     plot = ax.get_figure()
     plot.canvas.draw()
     for index, label in enumerate(ax.get_yticklabels()):
@@ -207,7 +205,7 @@ def jensen_shannon_distance(p, q, a=0.5):
     return np.sqrt(jensen_shannon_divergence)
 
 
-def hist_plot(data, ticks_number=[13, 7], decimals=[0, 2]):
+def hist_plot(data, ticks_number=[6, 6], decimals=[3, 3]):
     data_float = [np.asarray(list(filter(None, arr[1:])), dtype=np.float)
                   for arr in data[1:]]
     X_MAX = max(map(max, data_float))
@@ -230,7 +228,7 @@ def hist_plot(data, ticks_number=[13, 7], decimals=[0, 2]):
            xlabel=data[0][3], xticks=x_ticks, yticks=y_ticks)
     # Optional line | IF decimals 0 >> astype(np.int)
     ax.set_xticklabels(ax.get_xticks().astype(np.int), size=16)
-    plt.legend(loc='upper left', prop={'size': 12})
+    plt.legend(loc='upper right', prop={'size': 12})
     plot = ax.get_figure()
     plot.canvas.draw()
     for index, label in enumerate(ax.get_yticklabels()):
