@@ -305,8 +305,9 @@ def density(image, crypts_list):
                             thickness=-1)
             break
     background_area = np.sum(background_img == 255)
-    # print(crypts_area/background_area)  # >>> Criar CSV
-    return crypts_area/background_area
+    density = [crypts_area/background_area]
+    to_csv(density,
+           ["density", "Density", "", "Ratio"])
 
 
 def roundness(crypts_list):

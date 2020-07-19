@@ -89,7 +89,6 @@ def summary_stats(source):
             list(filter(None, arr[1:])), dtype=np.float) for arr in data[1:]]
         data_export.append(
             [data[0][1], np.mean(data_float), np.std(data_float)])
-    print(data_export)
     to_csv(data_export, "summary")
 
 
