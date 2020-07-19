@@ -33,8 +33,8 @@
 # =============================================================================
 
 # USAGE
-# python extract.py -f video_frame -p midia/main/1234/016-2017EM-PRE.mp4
-# python extract.py -f cryptometry -p midia/main/1234/016-2017EM-PRE-TR.tif
+# python extract.py -f video_frame -p midia/main/1234/
+# python extract.py -f cryptometry -p midia/main/1234/016-2017EM-PRE-0-302TR.tif
 
 import cv2 as cv
 import numpy as np
@@ -98,20 +98,23 @@ def send_sandbox(path, dest_path):
 
 def video_frame(source):
     # Convert a video to frame images
+    files = subprocess.run(f"find {source} -type f -name *mp4", shell=True,  stdout=subprocess.PIPE,
+                           stderr=subprocess.STDOUT, universal_newlines=True)
     import pathlib
-    path = pathlib.Path(source)
-    dir_structure(path, ["frame"])
-    sub_dir = path.parents[0] / "frame" / path.stem
-    vidcap = cv.VideoCapture(source)
-    success, image = vidcap.read()
-    count = 0
-    while success:
-        gray_frame = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
-        image = remove_text(gray_frame)
-        cv.imwrite(f"{str(sub_dir)}/frame{count:03d}.png", image)
+    for video_source in files.stdout.splitlines():
+        path = pathlib.Path(video_source)
+        dir_structure(path, ["frame"])
+        sub_dir = path.parents[0] / "frame" / path.stem
+        vidcap = cv.VideoCapture(video_source)
         success, image = vidcap.read()
-        count += 1
-    print(f"Finished: {source}")
+        count = 0
+        while success:
+            gray_frame = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+            image = remove_text(gray_frame)
+            cv.imwrite(f"{str(sub_dir)}/frame{count:03d}.png", image)
+            success, image = vidcap.read()
+            count += 1
+        print(f"Finished: {video_source}")
 
 
 def remove_text(image):
@@ -140,7 +143,7 @@ def full_processing(image):
     draw_object(figure, lista)  # 1 All
 
     kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (2, 2))
-    morph_trans = cv.erode(thresh.copy(), kernel, iterations=12)
+    morph_trans = cv.erode(thresh.copy(), kernel, iterations=17)
 
     contours_list, hierarchy = cv.findContours(
         morph_trans, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
@@ -168,7 +171,7 @@ def full_processing(image):
 
     draw_object(figure, lista)  # 3 Center
 
-    erode = cv.erode(figure.copy(), kernel, iterations=13)
+    erode = cv.erode(figure.copy(), kernel, iterations=14)
     contours_list, hierarchy = cv.findContours(
         erode, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
     lista = []
@@ -235,7 +238,7 @@ def cryptometry(source):
     print("Initialize cryptometry")
     image = cv.imread(source)
     from timeit import default_timer as timer
-    print(f"Measures\t\t\t\t TIME(s)")
+    print("Measures\t\t\t\t TIME(s)")
     start = timer()
     crypts_list = full_processing(image.copy())
     draw_countours(image, crypts_list)
@@ -254,13 +257,13 @@ def cryptometry(source):
     end = timer()
     print(f"Mean and Minimal intercrypt distance\t {end-start:.2f}")
     start = timer()
-    wall_thickness(image.copy(), crypts_list)
-    # wall_thickness(image.copy(), crypts_list, 'H')
+    # wall_thickness(image.copy(), crypts_list)
+    wall_thickness(image.copy(), crypts_list, 'H')
     end = timer()
     print(f"Wall Thickness\t\t\t\t {end-start:.2f}")
     start = timer()
-    maximal_feret(image.copy(), crypts_list)
-    # maximal_feret(image.copy(), crypts_list, 'H')
+    # maximal_feret(image.copy(), crypts_list)
+    maximal_feret(image.copy(), crypts_list, 'H')
     end = timer()
     print(f"Max Feret\t\t\t\t {end-start:.2f}")
     start = timer()
@@ -302,18 +305,22 @@ def density(image, crypts_list):
                             thickness=-1)
             break
     background_area = np.sum(background_img == 255)
-    # print(crypts_area/background_area)  # >>> Criar CSV
-    return crypts_area/background_area
+    density = [crypts_area/background_area]
+    to_csv(density,
+           ["density", "Density", "", "Ratio"])
 
 
 def roundness(crypts_list):
     roundness_list = []
+    angle_list = []
     for crypt in crypts_list:
         area = cv.contourArea(crypt)
         rect = cv.minAreaRect(crypt)
         (x, y), (width, height), angle = rect
+        angle_list.append(angle)
         major_axis = max(width, height)
         roundness_list.append((4*(area/(np.pi * (major_axis ** 2))))*100)
+    to_csv(angle_list, ["angle", "Crypts angles", "", "Angles (degrees)"])
     to_csv(roundness_list, ["round", "Crypts roundness", "", "Roundness (%)"])
 
 
@@ -522,10 +529,7 @@ def axis_ratio(image, crypts_list):
     mama_list = []
     for crypt in crypts_list:
         x, y, width, heigth = cv.boundingRect(crypt)
-        if (width > heigth):
-            mama_list.append(width/heigth)
-        else:
-            mama_list.append(heigth/width)
+        mama_list.append(max(width, heigth) / min(width, heigth))
         cv.rectangle(image, (x, y), (x + width, y + heigth), (0, 0, 255), 3)
     cv.imwrite("axisr_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
     to_csv(mama_list, ["axisr", "Axis Ratio", "", "Ratio"])
