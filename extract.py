@@ -227,7 +227,129 @@ def segmentation(image):
     return crypts_list
 
 
+def edge_segmentation(image):
+    gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+
+    # > Equalização
+    # >> CLAHE
+    clahe = cv.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    cl1 = clahe.apply(gray)
+    # >> Histograma
+    equa = cv.equalizeHist(gray)
+    equ = cv.GaussianBlur(equa, (3, 3), 0)
+    # equB = cv.GaussianBlur(equ, (3, 3), 0)
+
+    # hist_0 = cv.calcHist([gray], [0], None, [256], [1, 256])
+    # hist_1 = cv.calcHist([equa], [0], None, [256], [1, 256])
+    # hist_2 = cv.calcHist([equ], [0], None, [256], [1, 256])
+    # hist_3 = cv.calcHist([cl1], [0], None, [256], [10, 256])
+
+    # from matplotlib import pyplot as plt
+    # plt.subplot(221), plt.plot(hist_0)
+    # plt.subplot(222), plt.plot(hist_1)
+    # plt.subplot(223), plt.plot(hist_2)
+    # plt.subplot(224), plt.plot(hist_3)
+    # plt.xlim([0, 256])
+    # plt.show()
+
+    res = np.hstack((gray, equ, cl1))
+    # res = np.hstack((gray, Bequ, equB))
+    cv.imwrite('contraste.png', res)
+
+    # > Borda
+    # >> Laplacian
+    laplacianG = cv.Laplacian(gray, cv.CV_64F)
+    laplacianC = cv.Laplacian(cl1, cv.CV_64F)
+    laplacianE = cv.Laplacian(equ, cv.CV_64F)
+    lap = np.hstack((laplacianG, laplacianE, laplacianC))
+    cv.imwrite('lapla.png', lap)
+
+    # >> Sobelx
+    sobelxG = cv.Sobel(gray, cv.CV_64F, 1, 0, ksize=5)
+    sobelxC = cv.Sobel(cl1, cv.CV_64F, 1, 0, ksize=5)
+    sobelxE = cv.Sobel(equ, cv.CV_64F, 1, 0, ksize=5)
+    sobx = np.hstack((sobelxG, sobelxE, sobelxC))
+    cv.imwrite('sobx.png', sobx)
+
+    # >> Sobely
+    sobelyG = cv.Sobel(gray, cv.CV_64F, 0, 1, ksize=5)
+    sobelyC = cv.Sobel(cl1, cv.CV_64F, 0, 1, ksize=5)
+    sobelyE = cv.Sobel(equ, cv.CV_64F, 0, 1, ksize=5)
+    soby = np.hstack((sobelyG, sobelyE, sobelyC))
+    cv.imwrite('soby.png', soby)
+
+    # >> Canny
+    cannyG = cv.Canny(gray, 100, 200)
+    cannyC = cv.Canny(cl1, 100, 200)
+    cannyE = cv.Canny(equ, 100, 200)
+    cann = np.hstack((cannyG, cannyE, cannyC))
+    cv.imwrite('cann.png', cann)
+
+    # > Binarização
+    # >> MEAN
+    meanG = cv.adaptiveThreshold(
+        gray, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY, 11, 2)
+    meanC = cv.adaptiveThreshold(
+        cl1, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY, 11, 2)
+    meanE = cv.adaptiveThreshold(
+        equ, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY, 11, 2)
+    mean = np.hstack((meanG, meanE, meanC))
+    cv.imwrite('mean.png', mean)
+
+    # >> GAUSSIAN
+    gaussG = cv.adaptiveThreshold(
+        gray, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2)
+    gaussC = cv.adaptiveThreshold(
+        cl1, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2)
+    gaussE = cv.adaptiveThreshold(
+        equ, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2)
+    gauss = np.hstack((gaussG, gaussE, gaussC))
+    cv.imwrite('gauss.png', gauss)
+
+    # >> OTSU
+    # blur = cv.GaussianBlur(gray, (5, 5), 0)
+    ret3, otsuG = cv.threshold(gray, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+    ret3, otsuC = cv.threshold(cl1, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+    ret3, otsuE = cv.threshold(equ, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+    otsu = np.hstack((otsuG, otsuE, otsuC))
+    cv.imwrite('otsu.png', otsu)
+
+    import math
+    kernel = cv.getGaborKernel((21, 21), 5, 1, 10, 1, 0, cv.CV_32F)
+    kernel /= math.sqrt((kernel * kernel).sum())
+    filtered = cv.filter2D(equ, -1, kernel)
+    cv.imwrite('gabor.png', filtered)
+
+    # >> K-means
+    image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
+    # reshape the image to a 2D array of pixels and 3 color values (RGB)
+    # pixel_values = image.reshape((-1, 3))
+    pixel_values = equ.reshape((-1, 1))
+    # convert to float
+    pixel_values = np.float32(pixel_values)
+    print(pixel_values.shape)
+    # define stopping criteria
+    criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 100, 0.2)
+    # number of clusters (K)
+    k = 4
+    _, labels, (centers) = cv.kmeans(pixel_values, k, None,
+                                     criteria, 10, cv.KMEANS_RANDOM_CENTERS)
+    # convert back to 8 bit values
+    centers = np.uint8(centers)
+    # flatten the labels array
+    labels = labels.flatten()
+    # convert all pixels to the color of the centroids
+    segmented_image = centers[labels.flatten()]
+    # reshape back to the original image dimension
+    # kmeans = segmented_image.reshape(image.shape)
+    kmeans = segmented_image.reshape(equ.shape)
+    cv.imwrite('kmeans.png', kmeans)
+
+
 def cryptometry(source):
+    image = cv.imread(source)
+    edge_segmentation(image.copy())
+    quit()
     import pathlib
     path = pathlib.Path(source)
     dir_list = ["fig", "plot", "data"]
@@ -235,7 +357,7 @@ def cryptometry(source):
     print("Initialize cryptometry")
     image = cv.imread(source)
     from timeit import default_timer as timer
-    print(f"Measures\t\t\t\t TIME(s)")
+    print("Measures\t\t\t\t TIME(s)")
     start = timer()
     crypts_list = full_processing(image.copy())
     draw_countours(image, crypts_list)
