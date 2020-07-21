@@ -237,20 +237,8 @@ def edge_segmentation(image):
     # >> Histograma
     equa = cv.equalizeHist(gray)
     equ = cv.GaussianBlur(equa, (3, 3), 0)
-    # equB = cv.GaussianBlur(equ, (3, 3), 0)
-
-    # hist_0 = cv.calcHist([gray], [0], None, [256], [1, 256])
-    # hist_1 = cv.calcHist([equa], [0], None, [256], [1, 256])
-    # hist_2 = cv.calcHist([equ], [0], None, [256], [1, 256])
-    # hist_3 = cv.calcHist([cl1], [0], None, [256], [10, 256])
-
-    # from matplotlib import pyplot as plt
-    # plt.subplot(221), plt.plot(hist_0)
-    # plt.subplot(222), plt.plot(hist_1)
-    # plt.subplot(223), plt.plot(hist_2)
-    # plt.subplot(224), plt.plot(hist_3)
-    # plt.xlim([0, 256])
-    # plt.show()
+    blur = cv.GaussianBlur(gray, (7, 7), 0)
+    # blur = cv.blur(gray, (5, 5), 0)
 
     res = np.hstack((gray, equ, cl1))
     # res = np.hstack((gray, Bequ, equB))
@@ -320,35 +308,168 @@ def edge_segmentation(image):
     filtered = cv.filter2D(equ, -1, kernel)
     cv.imwrite('gabor.png', filtered)
 
-    # >> K-means
-    image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
-    # reshape the image to a 2D array of pixels and 3 color values (RGB)
-    # pixel_values = image.reshape((-1, 3))
-    pixel_values = equ.reshape((-1, 1))
-    # convert to float
-    pixel_values = np.float32(pixel_values)
-    print(pixel_values.shape)
-    # define stopping criteria
-    criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 100, 0.2)
-    # number of clusters (K)
-    k = 4
-    _, labels, (centers) = cv.kmeans(pixel_values, k, None,
-                                     criteria, 10, cv.KMEANS_RANDOM_CENTERS)
-    # convert back to 8 bit values
-    centers = np.uint8(centers)
-    # flatten the labels array
-    labels = labels.flatten()
-    # convert all pixels to the color of the centroids
-    segmented_image = centers[labels.flatten()]
-    # reshape back to the original image dimension
+    # >> K-means 1
+    # # image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
+    # image = gray.copy()
+    # # reshape the image to a 2D array of pixels and 3 color values (RGB)
+    # pixel_values = image.reshape((-1, 1))
+    # # pixel_values = blur.reshape((-1, 1))
+    # # pixel_values = equ.reshape((-1, 1))
+    # # convert to float
+    # pixel_values = np.float32(pixel_values)
+    # # define stopping criteria
+    # criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 100, 1.0)
+    # # number of clusters (K)
+    # k = 4
+    # _, labels, (centers) = cv.kmeans(pixel_values, k, None,
+    #                                  criteria, 10, cv.KMEANS_RANDOM_CENTERS)
+    # # convert back to 8 bit values
+    # centers = np.uint8(centers)
+    # # flatten the labels array
+    # labels = labels.flatten()
+    # # convert all pixels to the color of the centroids
+    # segmented_image = centers[labels.flatten()]
+    # # reshape back to the original image dimension
     # kmeans = segmented_image.reshape(image.shape)
-    kmeans = segmented_image.reshape(equ.shape)
-    cv.imwrite('kmeans.png', kmeans)
+
+    # # kmeans = segmented_image.reshape(equ.shape)
+    # # kmeans = segmented_image.reshape(blur.shape)
+    # # cv.imwrite('blur.png', blur)
+    # cv.imwrite('kmeans.png', kmeans)
+    # >> FIM K1
+
+    # >> KMEANS 2
+    imageB = blur
+    vectorized = imageB.reshape(-1, 1)
+    vectorized = np.float32(vectorized)
+    criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER,
+                10, 1.0)
+    k = 4
+    ret, label, center = cv.kmeans(vectorized, k, None,
+                                   criteria, 10, cv.KMEANS_RANDOM_CENTERS)
+    res = center[label.flatten()]
+    segmented_image = res.reshape((gray.shape))
+    cv.imwrite('seg-kmeans.png', segmented_image)
+
+    labels = label.reshape((imageB.shape[0], imageB.shape[1]))
+
+    lb = 2
+    component = np.zeros(image.shape, np.uint8)
+    component[labels == lb] = image[labels == lb]
+    cv.imwrite('kmeans.png', component)
+
+    # hist_0 = cv.calcHist([gray], [0], None, [256], [1, 256])
+    # hist_1 = cv.calcHist([equa], [0], None, [256], [1, 256])
+    # hist_2 = cv.calcHist([equ], [0], None, [256], [1, 256])
+    # hist_3 = cv.calcHist([cl1], [0], None, [256], [10, 256])
+
+    # from matplotlib import pyplot as plt
+    # plt.subplot(221), plt.plot(hist_0)
+    # plt.subplot(222), plt.plot(hist_1)
+    # plt.subplot(223), plt.plot(hist_2)
+    # plt.subplot(224), plt.plot(hist_3)
+    # plt.xlim([0, 256])
+    # plt.show()
+
+
+def kmeans_seg(image):
+    gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+    blur = cv.GaussianBlur(gray, (7, 7), 0)
+    imageB = blur
+    vectorized = imageB.reshape(-1, 1)
+    vectorized = np.float32(vectorized)
+    criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER,
+                10, 1.0)
+    k = 4
+    ret, label, center = cv.kmeans(vectorized, k, None,
+                                   criteria, 10, cv.KMEANS_RANDOM_CENTERS)
+    res = center[label.flatten()]
+    segmented_image = res.reshape((gray.shape))
+    cv.imwrite('kmeans-seg.png', segmented_image)
+
+    labels = label.reshape((imageB.shape[0], imageB.shape[1]))
+
+    lb = 2
+    component = np.zeros(image.shape, np.uint8)
+    component[labels == lb] = image[labels == lb]
+    component1 = np.zeros(gray.shape, np.uint8)
+    cv.imwrite('kmeans.png', component)
+    component1[labels == lb] = gray[labels == lb]
+    return component1
+
+
+def ellipse_seg(image):
+    height = int(0.08 * image.shape[0])
+    width = int(0.08 * image.shape[1])
+    image = cv.copyMakeBorder(image, top=height, bottom=height, left=width,
+                              right=width, borderType=cv.BORDER_CONSTANT, value=[0, 0, 0])
+    segmented = kmeans_seg(image)
+    cv.imwrite('seg-res.png', segmented)
+
+    thresh = cv.threshold(
+        segmented, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)[1]
+
+    # thresh = cv.adaptiveThreshold(
+    #     segmented, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY, 11, 2)
+
+    cv.imwrite('tresh.png', thresh)
+    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (5, 5))
+    morph_trans = cv.erode(thresh.copy(), kernel, iterations=9)  # 10
+    cv.imwrite('morph.png', morph_trans)
+
+    contours_list, hierarchy = cv.findContours(
+        morph_trans, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
+
+    # contours_list, hierarchy = cv.findContours(
+    #     thresh, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
+
+    lista = []
+    MIN_AREA = 5000
+    # MAX_AREA = 70000
+    for countour in contours_list:
+        area = cv.contourArea(countour)
+        if area > MIN_AREA:  # and area < MAX_AREA:
+            lista.append(countour)
+
+    figure = np.zeros(image.shape[:-1], np.uint8)
+    draw_object(figure, lista)  # 1 All
+    cv.imwrite('AAAA.png', figure)
+
+    final = np.zeros(image.shape[:-1], np.uint8)
+
+    for crypt in lista:
+        hull = cv.convexHull(crypt)
+        ellipseB = cv.fitEllipse(hull)
+        cv.ellipse(final, ellipseB, (255), -1)
+    cv.imwrite('BBBB.png', final)
+
+    morph_trans = cv.dilate(final.copy(), kernel, iterations=9)
+    cv.imwrite('BBCB.png', morph_trans)
+
+    crypts_list, hierarchy = cv.findContours(
+        morph_trans, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
+
+    # crypts_list, hierarchy = cv.findContours(
+    #     final, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
+
+    crypts = []
+    MIN_AREA = 32500
+    MAX_AREA = 700000
+    for countour in crypts_list:
+        area = cv.contourArea(countour)
+        print(area)
+        if area > MIN_AREA and area < MAX_AREA:
+            crypts.append(countour)
+
+    cv.imwrite('BCCC.png', image)
+    draw_countours(image, crypts)
+    cv.imwrite('BCCC.png', image)
 
 
 def cryptometry(source):
     image = cv.imread(source)
-    edge_segmentation(image.copy())
+    # edge_segmentation(image.copy())
+    ellipse_seg(image)
     quit()
     import pathlib
     path = pathlib.Path(source)
