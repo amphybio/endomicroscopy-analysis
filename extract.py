@@ -372,15 +372,16 @@ def edge_segmentation(image):
     # plt.show()
 
 
-def kmeans_seg(image):
+def kmeans_seg(image, k=4, lb=3):
     gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
-    blur = cv.GaussianBlur(gray, (7, 7), 0)
+    # gray = image >> Sobel + Kmeans
+    equ = cv.equalizeHist(gray)
+    blur = cv.GaussianBlur(equ, (7, 7), 0)
     imageB = blur
     vectorized = imageB.reshape(-1, 1)
     vectorized = np.float32(vectorized)
     criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER,
                 10, 1.0)
-    k = 4
     ret, label, center = cv.kmeans(vectorized, k, None,
                                    criteria, 10, cv.KMEANS_RANDOM_CENTERS)
     res = center[label.flatten()]
@@ -389,12 +390,13 @@ def kmeans_seg(image):
 
     labels = label.reshape((imageB.shape[0], imageB.shape[1]))
 
-    lb = 2
     component = np.zeros(image.shape, np.uint8)
     component[labels == lb] = image[labels == lb]
     component1 = np.zeros(gray.shape, np.uint8)
     cv.imwrite('kmeans.png', component)
+    # component1[labels == 2] = gray[labels == 2]
     component1[labels == lb] = gray[labels == lb]
+    component1[labels == 2] = gray[labels == 2]
     return component1
 
 
@@ -406,17 +408,22 @@ def ellipse_seg(image):
     segmented = kmeans_seg(image)
     cv.imwrite('seg-res.png', segmented)
 
-    thresh = cv.threshold(
-        segmented, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)[1]
+    # thresh = cv.threshold(
+    #     segmented, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)[1]
+
+    # thresh = cv.adaptiveThreshold(
+    #     segmented, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2)
 
     # thresh = cv.adaptiveThreshold(
     #     segmented, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY, 11, 2)
 
-    cv.imwrite('tresh.png', thresh)
-    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (5, 5))
-    morph_trans = cv.erode(thresh.copy(), kernel, iterations=9)  # 10
-    cv.imwrite('morph.png', morph_trans)
+    _, thresh = cv.threshold(segmented, 1, 255, cv.THRESH_BINARY)
 
+    cv.imwrite('tresh.png', thresh)
+    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (9, 9))
+    # morph_trans = cv.erode(thresh.copy(), kernel, iterations=12) # POS
+    morph_trans = cv.erode(thresh.copy(), kernel, iterations=9)  # PRE 10
+    cv.imwrite('morph.png', morph_trans)
     contours_list, hierarchy = cv.findContours(
         morph_trans, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
 
@@ -424,7 +431,7 @@ def ellipse_seg(image):
     #     thresh, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
 
     lista = []
-    MIN_AREA = 5000
+    MIN_AREA = 7500
     # MAX_AREA = 70000
     for countour in contours_list:
         area = cv.contourArea(countour)
@@ -443,7 +450,8 @@ def ellipse_seg(image):
         cv.ellipse(final, ellipseB, (255), -1)
     cv.imwrite('BBBB.png', final)
 
-    morph_trans = cv.dilate(final.copy(), kernel, iterations=9)
+    # morph_trans = cv.dilate(final.copy(), kernel, iterations=12)  # POS
+    morph_trans = cv.dilate(final.copy(), kernel, iterations=9)  # PRE 11
     cv.imwrite('BBCB.png', morph_trans)
 
     crypts_list, hierarchy = cv.findContours(
@@ -453,7 +461,7 @@ def ellipse_seg(image):
     #     final, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
 
     crypts = []
-    MIN_AREA = 32500
+    MIN_AREA = 25000
     MAX_AREA = 700000
     for countour in crypts_list:
         area = cv.contourArea(countour)
@@ -466,10 +474,43 @@ def ellipse_seg(image):
     cv.imwrite('BCCC.png', image)
 
 
+def boundary_seg(image):  # Verificar com tempo
+    gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+    equa = cv.equalizeHist(gray)
+    equ = cv.GaussianBlur(equa, (7, 7), 0)
+
+    sobelxG = cv.Sobel(gray, cv.CV_8U, 1, 0, ksize=5)
+    sobelxE = cv.Sobel(equ, cv.CV_8U, 1, 0, ksize=5)
+    sobx = np.hstack((sobelxG, sobelxE))
+    cv.imwrite('Bsobx.png', sobx)
+
+    # TEST KMEANS
+    segmented = kmeans_seg(sobelxG)
+    cv.imwrite('BSk.png', segmented)
+
+    # sobelxE = cv.GaussianBlur(sobelxE, (7, 7), 0)
+    # sobelxG = cv.GaussianBlur(sobelxG, (7, 7), 0)
+
+    gaussG = cv.adaptiveThreshold(
+        sobelxG, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2)
+    gaussE = cv.adaptiveThreshold(
+        sobelxE, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2)
+    gauss = np.hstack((gaussG, gaussE))
+    cv.imwrite('Bgauss.png', gauss)
+
+    ret3, otsuG = cv.threshold(
+        sobelxG, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+    ret3, otsuE = cv.threshold(
+        sobelxE, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+    otsu = np.hstack((otsuG, otsuE))
+    cv.imwrite('Botsu.png', otsu)
+
+
 def cryptometry(source):
     image = cv.imread(source)
     # edge_segmentation(image.copy())
     ellipse_seg(image)
+    # boundary_seg(image)
     quit()
     import pathlib
     path = pathlib.Path(source)
@@ -798,7 +839,7 @@ def to_csv(data, labels):
 
 def draw_countours(image, crypts_list):
     for crypt in crypts_list:
-        cv.drawContours(image, crypt, -1, (0, 0, 255), 6)
+        cv.drawContours(image, crypt, -1, (0, 0, 255), 10)
 
 
 def main():
