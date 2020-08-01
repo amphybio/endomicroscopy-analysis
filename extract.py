@@ -27,14 +27,14 @@
 #          BUGS:  ---
 #         NOTES:  ---
 #         AUTOR:  Alan U. Sabino <alan.sabino@usp.br>
-#       VERSION:  0.3
+#       VERSION:  0.5
 #       CREATED:  14/02/2020
 #      REVISION:  ---
 # =============================================================================
 
 # USAGE
-# python extract.py -f video_frame -p midia/main/1234/
-# python extract.py -f cryptometry -p midia/main/1234/016-2017EM-PRE-0-302TR.tif
+# python extract.py -f video_frame -p midia/main/0000/
+# python extract.py -f cryptometry -p midia/main/0000/016-2017EM-PRE-0-302TR.tif
 
 import cv2 as cv
 import numpy as np
@@ -124,372 +124,71 @@ def remove_text(image):
     return image
 
 
-def full_processing(image):
+def kmeans_seg(image, k=4):
     gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
-    thresh = cv.threshold(
-        gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)[1]
+    equalized = cv.equalizeHist(gray)
+    blur = cv.GaussianBlur(equalized, (7, 7), 0)
 
-    contours_list, hierarchy = cv.findContours(
-        thresh, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
-    lista = []
-    MIN_AREA = 9000
-    MAX_AREA = 145000
-    for countour in contours_list:
-        area = cv.contourArea(countour)
-        if area > MIN_AREA and area < MAX_AREA:
-            lista.append(countour)
-
-    figure = np.zeros(image.shape[:-1], np.uint8)
-    draw_object(figure, lista)  # 1 All
-
-    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (2, 2))
-    morph_trans = cv.erode(thresh.copy(), kernel, iterations=17)
-
-    contours_list, hierarchy = cv.findContours(
-        morph_trans, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
-    lista = []
-    MIN_AREA = 9000
-    MAX_AREA = 145000
-    for countour in contours_list:
-        area = cv.contourArea(countour)
-        if area > MIN_AREA and area < MAX_AREA:
-            lista.append(countour)
-
-    draw_object(figure, lista)  # 2 Edge
-
-    morph_trans = cv.dilate(thresh.copy(), kernel, iterations=5)
-
-    contours_list, hierarchy = cv.findContours(
-        morph_trans, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
-    lista = []
-    MIN_AREA = 9000
-    MAX_AREA = 145000
-    for countour in contours_list:
-        area = cv.contourArea(countour)
-        if area > MIN_AREA and area < MAX_AREA:
-            lista.append(countour)
-
-    draw_object(figure, lista)  # 3 Center
-
-    erode = cv.erode(figure.copy(), kernel, iterations=14)
-    contours_list, hierarchy = cv.findContours(
-        erode, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
-    lista = []
-    MIN_AREA = 5000
-    MAX_AREA = 145000
-    for countour in contours_list:
-        area = cv.contourArea(countour)
-        if area > MIN_AREA and area < MAX_AREA:
-            lista.append(countour)
-
-    separed = np.zeros(image.shape[:-1], np.uint8)
-    draw_object(separed, lista)  # 4 Separed crypts
-
-    final = np.zeros(image.shape[:-1], np.uint8)
-
-    for crypt in lista:
-        hull = cv.convexHull(crypt)
-        ellipseB = cv.fitEllipse(hull)
-        cv.ellipse(final, ellipseB, (255), -1)
-
-    contours_list, hierarchy = cv.findContours(
-        final, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)  # 5 Estimated ellipses
-
-    print(f"Number of crypts assessed: {len(contours_list)}")
-    return contours_list
-
-
-def draw_object(image, crypts_list):
-    for crypt in crypts_list:
-        cv.drawContours(image, [crypt], -1, (255), -1)
-
-
-def low_processing(image):
-    gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
-    thresh = cv.threshold(
-        gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)[1]
-    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (2, 2))
-    dilate = cv.dilate(thresh, kernel, iterations=10)
-    morph_trans = cv.erode(dilate, kernel, iterations=15)
-    processed_image = morph_trans
-    return processed_image
-
-
-def segmentation(image):
-    processed_image = low_processing(image)
-    contours_list, hierarchy = cv.findContours(
-        processed_image, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
-    crypts_list = []
-    MIN_AREA = 9000
-    MAX_AREA = 145000
-    for countour in contours_list:
-        area = cv.contourArea(countour)
-        if area > MIN_AREA and area < MAX_AREA:
-            crypts_list.append(countour)
-    print(f"Number of crypts assessed: {len(crypts_list)}")
-    return crypts_list
-
-
-def edge_segmentation(image):
-    gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
-
-    # > Equalização
-    # >> CLAHE
-    clahe = cv.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    cl1 = clahe.apply(gray)
-    # >> Histograma
-    equa = cv.equalizeHist(gray)
-    equ = cv.GaussianBlur(equa, (3, 3), 0)
-    blur = cv.GaussianBlur(gray, (7, 7), 0)
-    # blur = cv.blur(gray, (5, 5), 0)
-
-    res = np.hstack((gray, equ, cl1))
-    # res = np.hstack((gray, Bequ, equB))
-    cv.imwrite('contraste.png', res)
-
-    # > Borda
-    # >> Laplacian
-    laplacianG = cv.Laplacian(gray, cv.CV_64F)
-    laplacianC = cv.Laplacian(cl1, cv.CV_64F)
-    laplacianE = cv.Laplacian(equ, cv.CV_64F)
-    lap = np.hstack((laplacianG, laplacianE, laplacianC))
-    cv.imwrite('lapla.png', lap)
-
-    # >> Sobelx
-    sobelxG = cv.Sobel(gray, cv.CV_64F, 1, 0, ksize=5)
-    sobelxC = cv.Sobel(cl1, cv.CV_64F, 1, 0, ksize=5)
-    sobelxE = cv.Sobel(equ, cv.CV_64F, 1, 0, ksize=5)
-    sobx = np.hstack((sobelxG, sobelxE, sobelxC))
-    cv.imwrite('sobx.png', sobx)
-
-    # >> Sobely
-    sobelyG = cv.Sobel(gray, cv.CV_64F, 0, 1, ksize=5)
-    sobelyC = cv.Sobel(cl1, cv.CV_64F, 0, 1, ksize=5)
-    sobelyE = cv.Sobel(equ, cv.CV_64F, 0, 1, ksize=5)
-    soby = np.hstack((sobelyG, sobelyE, sobelyC))
-    cv.imwrite('soby.png', soby)
-
-    # >> Canny
-    cannyG = cv.Canny(gray, 100, 200)
-    cannyC = cv.Canny(cl1, 100, 200)
-    cannyE = cv.Canny(equ, 100, 200)
-    cann = np.hstack((cannyG, cannyE, cannyC))
-    cv.imwrite('cann.png', cann)
-
-    # > Binarização
-    # >> MEAN
-    meanG = cv.adaptiveThreshold(
-        gray, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY, 11, 2)
-    meanC = cv.adaptiveThreshold(
-        cl1, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY, 11, 2)
-    meanE = cv.adaptiveThreshold(
-        equ, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY, 11, 2)
-    mean = np.hstack((meanG, meanE, meanC))
-    cv.imwrite('mean.png', mean)
-
-    # >> GAUSSIAN
-    gaussG = cv.adaptiveThreshold(
-        gray, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2)
-    gaussC = cv.adaptiveThreshold(
-        cl1, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2)
-    gaussE = cv.adaptiveThreshold(
-        equ, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2)
-    gauss = np.hstack((gaussG, gaussE, gaussC))
-    cv.imwrite('gauss.png', gauss)
-
-    # >> OTSU
-    # blur = cv.GaussianBlur(gray, (5, 5), 0)
-    ret3, otsuG = cv.threshold(gray, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
-    ret3, otsuC = cv.threshold(cl1, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
-    ret3, otsuE = cv.threshold(equ, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
-    otsu = np.hstack((otsuG, otsuE, otsuC))
-    cv.imwrite('otsu.png', otsu)
-
-    import math
-    kernel = cv.getGaborKernel((21, 21), 5, 1, 10, 1, 0, cv.CV_32F)
-    kernel /= math.sqrt((kernel * kernel).sum())
-    filtered = cv.filter2D(equ, -1, kernel)
-    cv.imwrite('gabor.png', filtered)
-
-    # >> K-means 1
-    # # image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
-    # image = gray.copy()
-    # # reshape the image to a 2D array of pixels and 3 color values (RGB)
-    # pixel_values = image.reshape((-1, 1))
-    # # pixel_values = blur.reshape((-1, 1))
-    # # pixel_values = equ.reshape((-1, 1))
-    # # convert to float
-    # pixel_values = np.float32(pixel_values)
-    # # define stopping criteria
-    # criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 100, 1.0)
-    # # number of clusters (K)
-    # k = 4
-    # _, labels, (centers) = cv.kmeans(pixel_values, k, None,
-    #                                  criteria, 10, cv.KMEANS_RANDOM_CENTERS)
-    # # convert back to 8 bit values
-    # centers = np.uint8(centers)
-    # # flatten the labels array
-    # labels = labels.flatten()
-    # # convert all pixels to the color of the centroids
-    # segmented_image = centers[labels.flatten()]
-    # # reshape back to the original image dimension
-    # kmeans = segmented_image.reshape(image.shape)
-
-    # # kmeans = segmented_image.reshape(equ.shape)
-    # # kmeans = segmented_image.reshape(blur.shape)
-    # # cv.imwrite('blur.png', blur)
-    # cv.imwrite('kmeans.png', kmeans)
-    # >> FIM K1
-
-    # >> KMEANS 2
-    imageB = blur
-    vectorized = imageB.reshape(-1, 1)
-    vectorized = np.float32(vectorized)
-    criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER,
-                10, 1.0)
-    k = 4
-    ret, label, center = cv.kmeans(vectorized, k, None,
-                                   criteria, 10, cv.KMEANS_RANDOM_CENTERS)
-    res = center[label.flatten()]
-    segmented_image = res.reshape((gray.shape))
-    cv.imwrite('seg-kmeans.png', segmented_image)
-
-    labels = label.reshape((imageB.shape[0], imageB.shape[1]))
-
-    lb = 2
-    component = np.zeros(image.shape, np.uint8)
-    component[labels == lb] = image[labels == lb]
-    cv.imwrite('kmeans.png', component)
-
-    # hist_0 = cv.calcHist([gray], [0], None, [256], [1, 256])
-    # hist_1 = cv.calcHist([equa], [0], None, [256], [1, 256])
-    # hist_2 = cv.calcHist([equ], [0], None, [256], [1, 256])
-    # hist_3 = cv.calcHist([cl1], [0], None, [256], [10, 256])
-
-    # from matplotlib import pyplot as plt
-    # plt.subplot(221), plt.plot(hist_0)
-    # plt.subplot(222), plt.plot(hist_1)
-    # plt.subplot(223), plt.plot(hist_2)
-    # plt.subplot(224), plt.plot(hist_3)
-    # plt.xlim([0, 256])
-    # plt.show()
-
-
-def kmeans_seg(image, k=4, lb=3):
-    gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
-    # gray = image >> Sobel + Kmeans
-    equ = cv.equalizeHist(gray)
-    blur = cv.GaussianBlur(equ, (7, 7), 0)
-    imageB = blur
-    vectorized = imageB.reshape(-1, 1)
+    vectorized = blur.reshape(-1, 1)
     vectorized = np.float32(vectorized)
     criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER,
                 10, 1.0)
     ret, label, center = cv.kmeans(vectorized, k, None,
                                    criteria, 10, cv.KMEANS_RANDOM_CENTERS)
-    res = center[label.flatten()]
-    segmented_image = res.reshape((gray.shape))
-    cv.imwrite('kmeans-seg.png', segmented_image)
+    labels = label.reshape((gray.shape))
 
-    labels = label.reshape((imageB.shape[0], imageB.shape[1]))
-
-    component = np.zeros(image.shape, np.uint8)
-    component[labels == lb] = image[labels == lb]
-    component1 = np.zeros(gray.shape, np.uint8)
-    cv.imwrite('kmeans.png', component)
-    # component1[labels == 2] = gray[labels == 2]
-    component1[labels == lb] = gray[labels == lb]
-    component1[labels == 2] = gray[labels == 2]
-    return component1
+    segmented = np.zeros(gray.shape, np.uint8)
+    segmented[labels == 3] = gray[labels == 3]
+    segmented[labels == 2] = gray[labels == 2]
+    return segmented
 
 
 def ellipse_seg(image):
+    segmented = kmeans_seg(image)
+
     height = int(0.08 * image.shape[0])
     width = int(0.08 * image.shape[1])
-    image = cv.copyMakeBorder(image, top=height, bottom=height, left=width,
-                              right=width, borderType=cv.BORDER_CONSTANT, value=[0, 0, 0])
-    segmented = kmeans_seg(image)
-    cv.imwrite('seg-res.png', segmented)
+    segmented = cv.copyMakeBorder(segmented, top=height, bottom=height, left=width,
+                                  right=width, borderType=cv.BORDER_CONSTANT, value=[0, 0, 0])
 
     _, thresh = cv.threshold(segmented, 1, 255, cv.THRESH_BINARY)
 
-    cv.imwrite('tresh.png', thresh)
     kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (9, 9))
-    morph_trans = cv.erode(thresh.copy(), kernel, iterations=9)
-    cv.imwrite('morph.png', morph_trans)
+    morph_trans_e = cv.erode(thresh, kernel, iterations=9)
     contours_list, hierarchy = cv.findContours(
-        morph_trans, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
+        morph_trans_e, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
 
-    lista = []
-    MIN_AREA = 7500
+    crypts = []
+    MIN_AREA = 6200
     for countour in contours_list:
         area = cv.contourArea(countour)
         if area > MIN_AREA:
-            lista.append(countour)
+            crypts.append(countour)
 
-    figure = np.zeros(image.shape[:-1], np.uint8)
-    draw_object(figure, lista)
-    cv.imwrite('AAAA.png', figure)
+    figure = np.zeros(thresh.shape, np.uint8)
 
-    final = np.zeros(image.shape[:-1], np.uint8)
-
-    for crypt in lista:
+    for crypt in crypts:
         hull = cv.convexHull(crypt)
-        ellipseB = cv.fitEllipse(hull)
-        cv.ellipse(final, ellipseB, (255), -1)
-    cv.imwrite('BBBB.png', final)
+        ellipse = cv.fitEllipse(hull)
+        cv.ellipse(figure, ellipse, (255), -1)
 
-    morph_trans = cv.dilate(final.copy(), kernel, iterations=9)
-    cv.imwrite('BBCB.png', morph_trans)
-
+    morph_trans_d = cv.dilate(figure, kernel, iterations=9)
     crypts_list, hierarchy = cv.findContours(
-        morph_trans, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
+        morph_trans_d, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
 
-    crypts = []
+    crypts_resized = []
     MIN_AREA = 25000
     MAX_AREA = 700000
     for countour in crypts_list:
         area = cv.contourArea(countour)
         if area > MIN_AREA and area < MAX_AREA:
-            crypts.append(countour)
+            crypts_resized.append(countour)
 
-    cv.imwrite('BCCC.png', image)
-    draw_countours(image, crypts)
-    cv.imwrite('BCCC.png', image)
-    print(f"Number of crypts assessed: {len(crypts)}")
-    return crypts, image
+    image_resized = cv.copyMakeBorder(image, top=height, bottom=height, left=width,
+                                      right=width, borderType=cv.BORDER_CONSTANT, value=[0, 0, 0])
 
-
-def boundary_seg(image):  # Verificar com tempo
-    gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
-    equa = cv.equalizeHist(gray)
-    equ = cv.GaussianBlur(equa, (7, 7), 0)
-
-    sobelxG = cv.Sobel(gray, cv.CV_8U, 1, 0, ksize=5)
-    sobelxE = cv.Sobel(equ, cv.CV_8U, 1, 0, ksize=5)
-    sobx = np.hstack((sobelxG, sobelxE))
-    cv.imwrite('Bsobx.png', sobx)
-
-    # TEST KMEANS
-    segmented = kmeans_seg(sobelxG)
-    cv.imwrite('BSk.png', segmented)
-
-    # sobelxE = cv.GaussianBlur(sobelxE, (7, 7), 0)
-    # sobelxG = cv.GaussianBlur(sobelxG, (7, 7), 0)
-
-    gaussG = cv.adaptiveThreshold(
-        sobelxG, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2)
-    gaussE = cv.adaptiveThreshold(
-        sobelxE, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2)
-    gauss = np.hstack((gaussG, gaussE))
-    cv.imwrite('Bgauss.png', gauss)
-
-    ret3, otsuG = cv.threshold(
-        sobelxG, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
-    ret3, otsuE = cv.threshold(
-        sobelxE, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
-    otsu = np.hstack((otsuG, otsuE))
-    cv.imwrite('Botsu.png', otsu)
+    print(f"Number of crypts assessed: {len(crypts_resized)}")
+    return crypts_resized, image_resized
 
 
 def cryptometry(source):
@@ -498,49 +197,57 @@ def cryptometry(source):
     dir_list = ["fig", "plot", "data"]
     dir_structure(path, dir_list)
     print("Initialize cryptometry")
-    image = cv.imread(source)
+    image_source = cv.imread(source)
     from timeit import default_timer as timer
     print("Measures\t\t\t\t TIME(s)")
+    icy = 0
     start = timer()
-    crypts_list, image = ellipse_seg(image)
-    # crypts_list = full_processing(image.copy())
+    crypts_list, image = ellipse_seg(image_source)
     draw_countours(image, crypts_list)
     end = timer()
+    icy += (end-start)
     print(f"Segmentation and draw\t\t\t {end-start:.2f}")
     start = timer()
     axis_ratio(image.copy(), crypts_list)
     end = timer()
+    icy += (end-start)
     print(f"Axis ratio\t\t\t\t {end-start:.2f}")
     start = timer()
     perimeter(image.copy(), crypts_list)
     end = timer()
+    icy += (end-start)
     print(f"Perimeter and Sphericity\t\t {end-start:.2f}")
+    start = timer()
+    elongation_factor(image.copy(), crypts_list)
+    end = timer()
+    icy += (end-start)
+    print(f"Elongation factor\t\t\t {end-start:.2f}")
+    start = timer()
+    roundness(crypts_list)
+    end = timer()
+    icy += (end-start)
+    print(f"Roundness\t\t\t\t {end-start:.2f}")
+    start = timer()
+    maximal_feret(image.copy(), crypts_list)
+    # maximal_feret(image.copy(), crypts_list, 'H')
+    end = timer()
+    icy += (end-start)
+    print(f"Max Feret\t\t\t\t {end-start:.2f}")
+    start = timer()
+    wall_thickness(image.copy(), crypts_list)
+    # wall_thickness(image.copy(), crypts_list, 'H')
+    end = timer()
+    print(f"Wall Thickness\t\t\t\t {end-start:.2f}")
     start = timer()
     intercrypt_distance(image.copy(), crypts_list)
     end = timer()
     print(f"Mean and Minimal intercrypt distance\t {end-start:.2f}")
     start = timer()
-    # wall_thickness(image.copy(), crypts_list)
-    wall_thickness(image.copy(), crypts_list, 'H')
-    end = timer()
-    print(f"Wall Thickness\t\t\t\t {end-start:.2f}")
-    start = timer()
-    # maximal_feret(image.copy(), crypts_list)
-    maximal_feret(image.copy(), crypts_list, 'H')
-    end = timer()
-    print(f"Max Feret\t\t\t\t {end-start:.2f}")
-    start = timer()
-    elongation_factor(image.copy(), crypts_list)
-    end = timer()
-    print(f"Elongation factor\t\t\t {end-start:.2f}")
-    start = timer()
-    roundness(crypts_list)
-    end = timer()
-    print(f"Roundness\t\t\t\t {end-start:.2f}")
-    start = timer()
-    density(image.copy(), crypts_list)
+    density(image_source.copy(), crypts_list)
     end = timer()
     print(f"Density\t\t\t\t\t {end-start:.2f} \nFinished cryptometry")
+    print(f"ICY\t\t\t\t\t {icy:.2f}")
+
     for sub_dir in dir_list:
         subprocess.run(f"mv -vn *_{sub_dir}* {str(path.parents[0] / sub_dir / path.stem)}", shell=True, stdout=subprocess.PIPE,
                        stderr=subprocess.STDOUT, universal_newlines=True)
@@ -552,22 +259,11 @@ def density(image, crypts_list):
         cv.drawContours(crypts_img, [crypt], -1, (255),
                         thickness=-1)
     crypts_area = np.sum(crypts_img == 255)
-    processed_image = low_processing(image)
-    height = int(0.01 * processed_image.shape[0])
-    width = int(0.01 * processed_image.shape[1])
-    border = cv.copyMakeBorder(processed_image, top=height, bottom=height,
-                               left=width, right=width,
-                               borderType=cv.BORDER_CONSTANT, value=[255, 255,
-                                                                     255])
-    contours_list, hierarchy_list = cv.findContours(
-        border, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
-    background_img = np.zeros(border.shape, np.uint8)
-    for index, hierarchy in enumerate(hierarchy_list[0]):
-        if hierarchy[0] == -1 and hierarchy[3] == 0:
-            cv.drawContours(background_img, [contours_list[index]], -1, (255),
-                            thickness=-1)
-            break
-    background_area = np.sum(background_img == 255)
+
+    _, thresh = cv.threshold(image, 1, 255, cv.THRESH_BINARY)
+    thresh = cv.cvtColor(thresh, cv.COLOR_BGR2GRAY)
+    background_area = np.sum(thresh == 255)
+
     density = [crypts_area/background_area]
     to_csv(density,
            ["density", "Density", "", "Ratio"])
@@ -793,7 +489,7 @@ def axis_ratio(image, crypts_list):
     for crypt in crypts_list:
         x, y, width, heigth = cv.boundingRect(crypt)
         mama_list.append(max(width, heigth) / min(width, heigth))
-        cv.rectangle(image, (x, y), (x + width, y + heigth), (0, 0, 255), 3)
+        cv.rectangle(image, (x, y), (x + width, y + heigth), (115, 158, 0), 12)
     cv.imwrite("axisr_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
     to_csv(mama_list, ["axisr", "Axis Ratio", "", "Ratio"])
 
@@ -851,3 +547,285 @@ if __name__ == "__main__":
     print(
         f"Mean time elapsed {timeit.timeit(main, number=repetitions)/repetitions:.2f}s"
         f" in {repetitions} executions")
+
+
+# def full_processing(image):
+#     gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+#     thresh = cv.threshold(
+#         gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)[1]
+
+#     contours_list, hierarchy = cv.findContours(
+#         thresh, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
+#     lista = []
+#     MIN_AREA = 9000
+#     MAX_AREA = 145000
+#     for countour in contours_list:
+#         area = cv.contourArea(countour)
+#         if area > MIN_AREA and area < MAX_AREA:
+#             lista.append(countour)
+
+#     figure = np.zeros(image.shape[:-1], np.uint8)
+#     draw_object(figure, lista)  # 1 All
+
+#     kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (2, 2))
+#     morph_trans = cv.erode(thresh.copy(), kernel, iterations=17)
+
+#     contours_list, hierarchy = cv.findContours(
+#         morph_trans, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
+#     lista = []
+#     MIN_AREA = 9000
+#     MAX_AREA = 145000
+#     for countour in contours_list:
+#         area = cv.contourArea(countour)
+#         if area > MIN_AREA and area < MAX_AREA:
+#             lista.append(countour)
+
+#     draw_object(figure, lista)  # 2 Edge
+
+#     morph_trans = cv.dilate(thresh.copy(), kernel, iterations=5)
+
+#     contours_list, hierarchy = cv.findContours(
+#         morph_trans, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
+#     lista = []
+#     MIN_AREA = 9000
+#     MAX_AREA = 145000
+#     for countour in contours_list:
+#         area = cv.contourArea(countour)
+#         if area > MIN_AREA and area < MAX_AREA:
+#             lista.append(countour)
+
+#     draw_object(figure, lista)  # 3 Center
+
+#     erode = cv.erode(figure.copy(), kernel, iterations=14)
+#     contours_list, hierarchy = cv.findContours(
+#         erode, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
+#     lista = []
+#     MIN_AREA = 5000
+#     MAX_AREA = 145000
+#     for countour in contours_list:
+#         area = cv.contourArea(countour)
+#         if area > MIN_AREA and area < MAX_AREA:
+#             lista.append(countour)
+
+#     separed = np.zeros(image.shape[:-1], np.uint8)
+#     draw_object(separed, lista)  # 4 Separed crypts
+
+#     final = np.zeros(image.shape[:-1], np.uint8)
+
+#     for crypt in lista:
+#         hull = cv.convexHull(crypt)
+#         ellipseB = cv.fitEllipse(hull)
+#         cv.ellipse(final, ellipseB, (255), -1)
+
+#     contours_list, hierarchy = cv.findContours(
+#         final, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)  # 5 Estimated ellipses
+
+#     print(f"Number of crypts assessed: {len(contours_list)}")
+#     return contours_list
+
+
+# def low_processing(image):
+#     gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+#     thresh = cv.threshold(
+#         gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)[1]
+#     kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (2, 2))
+#     dilate = cv.dilate(thresh, kernel, iterations=10)
+#     morph_trans = cv.erode(dilate, kernel, iterations=15)
+#     processed_image = morph_trans
+#     return processed_image
+
+
+# def segmentation(image):
+#     processed_image = low_processing(image)
+#     contours_list, hierarchy = cv.findContours(
+#         processed_image, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
+#     crypts_list = []
+#     MIN_AREA = 9000
+#     MAX_AREA = 145000
+#     for countour in contours_list:
+#         area = cv.contourArea(countour)
+#         if area > MIN_AREA and area < MAX_AREA:
+#             crypts_list.append(countour)
+#     print(f"Number of crypts assessed: {len(crypts_list)}")
+#     return crypts_list
+
+
+# def boundary_seg(image):  # Verificar com tempo
+#     gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+#     equa = cv.equalizeHist(gray)
+#     equ = cv.GaussianBlur(equa, (7, 7), 0)
+
+#     sobelxG = cv.Sobel(gray, cv.CV_8U, 1, 0, ksize=5)
+#     sobelxE = cv.Sobel(equ, cv.CV_8U, 1, 0, ksize=5)
+#     sobx = np.hstack((sobelxG, sobelxE))
+#     cv.imwrite('Bsobx.png', sobx)
+
+#     # TEST KMEANS
+#     segmented = kmeans_seg(sobelxG)
+#     cv.imwrite('BSk.png', segmented)
+
+#     # sobelxE = cv.GaussianBlur(sobelxE, (7, 7), 0)
+#     # sobelxG = cv.GaussianBlur(sobelxG, (7, 7), 0)
+
+#     gaussG = cv.adaptiveThreshold(
+#         sobelxG, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2)
+#     gaussE = cv.adaptiveThreshold(
+#         sobelxE, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2)
+#     gauss = np.hstack((gaussG, gaussE))
+#     cv.imwrite('Bgauss.png', gauss)
+
+#     ret3, otsuG = cv.threshold(
+#         sobelxG, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+#     ret3, otsuE = cv.threshold(
+#         sobelxE, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+#     otsu = np.hstack((otsuG, otsuE))
+#     cv.imwrite('Botsu.png', otsu)
+
+
+# def edge_segmentation(image):
+#     gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+
+#     # > Equalização
+#     # >> CLAHE
+#     clahe = cv.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+#     cl1 = clahe.apply(gray)
+#     # >> Histograma
+#     equa = cv.equalizeHist(gray)
+#     equ = cv.GaussianBlur(equa, (3, 3), 0)
+#     blur = cv.GaussianBlur(gray, (7, 7), 0)
+#     # blur = cv.blur(gray, (5, 5), 0)
+
+#     res = np.hstack((gray, equ, cl1))
+#     # res = np.hstack((gray, Bequ, equB))
+#     cv.imwrite('contraste.png', res)
+
+#     # > Borda
+#     # >> Laplacian
+#     laplacianG = cv.Laplacian(gray, cv.CV_64F)
+#     laplacianC = cv.Laplacian(cl1, cv.CV_64F)
+#     laplacianE = cv.Laplacian(equ, cv.CV_64F)
+#     lap = np.hstack((laplacianG, laplacianE, laplacianC))
+#     cv.imwrite('lapla.png', lap)
+
+#     # >> Sobelx
+#     sobelxG = cv.Sobel(gray, cv.CV_64F, 1, 0, ksize=5)
+#     sobelxC = cv.Sobel(cl1, cv.CV_64F, 1, 0, ksize=5)
+#     sobelxE = cv.Sobel(equ, cv.CV_64F, 1, 0, ksize=5)
+#     sobx = np.hstack((sobelxG, sobelxE, sobelxC))
+#     cv.imwrite('sobx.png', sobx)
+
+#     # >> Sobely
+#     sobelyG = cv.Sobel(gray, cv.CV_64F, 0, 1, ksize=5)
+#     sobelyC = cv.Sobel(cl1, cv.CV_64F, 0, 1, ksize=5)
+#     sobelyE = cv.Sobel(equ, cv.CV_64F, 0, 1, ksize=5)
+#     soby = np.hstack((sobelyG, sobelyE, sobelyC))
+#     cv.imwrite('soby.png', soby)
+
+#     # >> Canny
+#     cannyG = cv.Canny(gray, 100, 200)
+#     cannyC = cv.Canny(cl1, 100, 200)
+#     cannyE = cv.Canny(equ, 100, 200)
+#     cann = np.hstack((cannyG, cannyE, cannyC))
+#     cv.imwrite('cann.png', cann)
+
+#     # > Binarização
+#     # >> MEAN
+#     meanG = cv.adaptiveThreshold(
+#         gray, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY, 11, 2)
+#     meanC = cv.adaptiveThreshold(
+#         cl1, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY, 11, 2)
+#     meanE = cv.adaptiveThreshold(
+#         equ, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY, 11, 2)
+#     mean = np.hstack((meanG, meanE, meanC))
+#     cv.imwrite('mean.png', mean)
+
+#     # >> GAUSSIAN
+#     gaussG = cv.adaptiveThreshold(
+#         gray, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2)
+#     gaussC = cv.adaptiveThreshold(
+#         cl1, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2)
+#     gaussE = cv.adaptiveThreshold(
+#         equ, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2)
+#     gauss = np.hstack((gaussG, gaussE, gaussC))
+#     cv.imwrite('gauss.png', gauss)
+
+#     # >> OTSU
+#     # blur = cv.GaussianBlur(gray, (5, 5), 0)
+#     ret3, otsuG = cv.threshold(gray, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+#     ret3, otsuC = cv.threshold(cl1, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+#     ret3, otsuE = cv.threshold(equ, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+#     otsu = np.hstack((otsuG, otsuE, otsuC))
+#     cv.imwrite('otsu.png', otsu)
+
+#     import math
+#     kernel = cv.getGaborKernel((21, 21), 5, 1, 10, 1, 0, cv.CV_32F)
+#     kernel /= math.sqrt((kernel * kernel).sum())
+#     filtered = cv.filter2D(equ, -1, kernel)
+#     cv.imwrite('gabor.png', filtered)
+
+#     # >> K-means 1
+#     # # image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
+#     # image = gray.copy()
+#     # # reshape the image to a 2D array of pixels and 3 color values (RGB)
+#     # pixel_values = image.reshape((-1, 1))
+#     # # pixel_values = blur.reshape((-1, 1))
+#     # # pixel_values = equ.reshape((-1, 1))
+#     # # convert to float
+#     # pixel_values = np.float32(pixel_values)
+#     # # define stopping criteria
+#     # criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 100, 1.0)
+#     # # number of clusters (K)
+#     # k = 4
+#     # _, labels, (centers) = cv.kmeans(pixel_values, k, None,
+#     #                                  criteria, 10, cv.KMEANS_RANDOM_CENTERS)
+#     # # convert back to 8 bit values
+#     # centers = np.uint8(centers)
+#     # # flatten the labels array
+#     # labels = labels.flatten()
+#     # # convert all pixels to the color of the centroids
+#     # segmented_image = centers[labels.flatten()]
+#     # # reshape back to the original image dimension
+#     # kmeans = segmented_image.reshape(image.shape)
+
+#     # # kmeans = segmented_image.reshape(equ.shape)
+#     # # kmeans = segmented_image.reshape(blur.shape)
+#     # # cv.imwrite('blur.png', blur)
+#     # cv.imwrite('kmeans.png', kmeans)
+#     # >> FIM K1
+
+#     # >> KMEANS 2
+#     imageB = blur
+#     vectorized = imageB.reshape(-1, 1)
+#     vectorized = np.float32(vectorized)
+#     criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER,
+#                 10, 1.0)
+#     k = 4
+#     ret, label, center = cv.kmeans(vectorized, k, None,
+#                                    criteria, 10, cv.KMEANS_RANDOM_CENTERS)
+#     res = center[label.flatten()]
+#     segmented_image = res.reshape((gray.shape))
+#     cv.imwrite('seg-kmeans.png', segmented_image)
+
+#     labels = label.reshape((imageB.shape[0], imageB.shape[1]))
+
+#     lb = 2
+#     component = np.zeros(image.shape, np.uint8)
+#     component[labels == lb] = image[labels == lb]
+#     cv.imwrite('kmeans.png', component)
+
+#     # hist_0 = cv.calcHist([gray], [0], None, [256], [1, 256])
+#     # hist_1 = cv.calcHist([equa], [0], None, [256], [1, 256])
+#     # hist_2 = cv.calcHist([equ], [0], None, [256], [1, 256])
+#     # hist_3 = cv.calcHist([cl1], [0], None, [256], [10, 256])
+
+#     # from matplotlib import pyplot as plt
+#     # plt.subplot(221), plt.plot(hist_0)
+#     # plt.subplot(222), plt.plot(hist_1)
+#     # plt.subplot(223), plt.plot(hist_2)
+#     # plt.subplot(224), plt.plot(hist_3)
+#     # plt.xlim([0, 256])
+#     # plt.show()
+
+# def draw_object(image, crypts_list):
+#     for crypt in crypts_list:
+#         cv.drawContours(image, [crypt], -1, (255), -1)
