@@ -30,12 +30,11 @@
 # =============================================================================
 
 # USAGE
-# python investigation.py -f box-plot -p  data/001/perim_data.csv -d 7 2
-# python investigation.py -f hist-plot -p data/002/perim_data.csv -d 6 6 0 3
+# python investigation.py -f box-plot  -p data/0001/perim_data.csv -d 7 2
+# python investigation.py -f hist-plot -p data/0002/perim_data.csv -d 6 6 0 3
+# python investigation.py -f summary   -p data/0003/
 # python investigation.py -f dist-plot -p data/perim_combined_data.csv -d 6 6 0 3
-# python investigation.py -f join-csv -p  data/ -m perim
-
-# python investigation.py -f summary -p midia/main/1234/data/016-2017EM-PRE-0-302TR/
+# python investigation.py -f join-csv  -p data/ -m perim
 
 
 import csv
@@ -70,28 +69,22 @@ def join_csv(source, measure):
 def dist_plot(data, ticks_number=[5, 7], decimals=[2, 3]):
     data_float = [np.asarray(list(filter(None, arr[1:])), dtype=np.float)
                   for arr in data[1:]]
-    x_ticks = ticks_interval(data_float, ticks_number[0], decimals[0])
     plot_style()
     _, ax = plt.subplots(1)
+    x_ticks = ticks_interval(data_float, ticks_number[0], decimals[0])
     densities = [0]
-    for index, img_data in enumerate(data_float):
+    for index, img_data in enumerate(data_float[:2]):
         densities.append(ax.hist(img_data, density=True, bins=x_ticks,
                                  alpha=.85, label=data[index+1][0])[0])
     densities = densities[1:]
     p = densities[0] / np.asarray(densities[0]).sum()
     q = densities[1] / np.asarray(densities[1]).sum()
+    entropy_p, max_entropy = shannon_entropy(p)
+    entropy_q, _ = shannon_entropy(q)
     print(
-        f"\nShannon(p):\t\t{shannon_entropy(p):.3f} "
-        f"\nShannon(q):\t\t{shannon_entropy(q):.3f} "
-        f"\nHellinger Coef:\t\t{hellinger_coefficient(p,q):.3f}"
-        f"\nHellinger Dist:\t\t{hellinger_distance(p,q):.3f}"
-        f"\nJeffreys Dist:\t\t{jeffreys_distance(p,q):.3f}"
-        f"\nKullback Div:\t\t{kullback_leibler_divergence(p,q):.3f}"
-        f"\nKullbakc Dist:\t\t{jeffrey_divergence(p,q):.3f}"
-        "\n---------------"
-        f"\nBhattacharyya Dist:\t{bhattacharyya_distance(p,q):.3f}"
-        f"\nJensen-Shannon Dist:\t{jensen_shannon_distance(p,q):.3f}"
-        "\n---------------")
+        f"\nS(p): {entropy_p:.3f}\t S(q): {entropy_q:.3f}\t Max(S): {max_entropy:.3f}"
+        f"\nHellinger Distance(p,q):{hellinger_distance(p,q):.3f}"
+        "\n")
     ax.set(title=data[0][1], ylabel="Density", xlabel=data[0][3], xticks=x_ticks,
            yticks=ticks_interval(densities, ticks_number[1], decimals[1]))
     # Optional line | IF decimals 0 >> astype(np.int)
@@ -109,7 +102,14 @@ def dist_plot(data, ticks_number=[5, 7], decimals=[2, 3]):
 
 
 def shannon_entropy(p):
-    return -np.sum(np.where(p != 0, p*np.log2(p), 0))
+    entropy = 0
+    for value in p:
+        entropy += value*np.log2(value) if value != 0 else 0
+    entropy *= -1
+    # entropy = -np.sum(np.where(p != 0, p*np.log2(p), 0))
+    uniform = [1/len(p)] * len(p)
+    max_entropy = -np.sum(uniform*np.log2(uniform))
+    return entropy, max_entropy
 
 
 def jeffreys_distance(p, q):
@@ -215,7 +215,7 @@ def summary_stats(source):
     for path in csv_files.stdout.splitlines():
         data = read_csv(path)
         data_float = [np.asarray(
-            list(filter(None, arr[1:])), dtype=np.float) for arr in data[1:]]
+            list(filter(None, arr)), dtype=np.float) for arr in data[1:]]
         data_export.append(
             [data[0][1], np.mean(data_float), np.std(data_float)])
     to_csv(data_export, "summary")
