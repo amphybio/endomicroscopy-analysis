@@ -66,14 +66,28 @@ def join_csv(source, measure):
     to_csv(data, f'{measure}_combined_data')
 
 
-def dist_plot(data, ticks_number=[5, 7], decimals=[2, 3]):
+def rm_outliers(data):
+    clean = []
+    for line in data:
+        ordered = np.sort(line)
+        Q1 = np.quantile(ordered, 0.25)
+        Q3 = np.quantile(ordered, 0.75)
+        IQR = Q3 - Q1
+        clean.append(ordered[(ordered >= Q1 - 1.5*IQR) &
+                             (ordered <= Q3 + 1.5*IQR)])
+    return clean
+
+
+def dist_plot(data, ticks_number=[5, 7], decimals=[2, 3], outliers=False):
     data_float = [np.asarray(list(filter(None, arr[1:])), dtype=np.float)
                   for arr in data[1:]]
+    if not outliers:
+        data_float = rm_outliers(data_float)
     plot_style()
     _, ax = plt.subplots(1)
     x_ticks = ticks_interval(data_float, ticks_number[0], decimals[0])
     densities = [0]
-    for index, img_data in enumerate(data_float[:2]):
+    for index, img_data in enumerate(data_float[: 2]):
         densities.append(ax.hist(img_data, density=True, bins=x_ticks,
                                  alpha=.85, label=data[index+1][0])[0])
     densities = densities[1:]
@@ -97,7 +111,8 @@ def dist_plot(data, ticks_number=[5, 7], decimals=[2, 3]):
             label.set_visible(True)
         else:
             label.set_visible(False)
-    plt.savefig(f"{data[0][0]}_dist_plot.tif", dpi=600, bbox_inches="tight")
+    plt.savefig(f"{data[0][0]}_dist_plot.tif",
+                dpi=600, bbox_inches="tight")
     plt.clf()
 
 
@@ -204,10 +219,14 @@ def ticks_interval(data, quantity, decimals):
     interval = np.round((max_value - min_value) / quantity, decimals)
     ticks = np.round(np.arange(min_value, max_value +
                                interval, interval), decimals)
+    if max(ticks) < max_value:
+        ticks = np.append(ticks, ticks[-1]+interval)
+    if min(ticks) > min_value:
+        ticks = np.insert(ticks, 0,  ticks[0]-interval)
     return ticks
 
 
-def summary_stats(source):
+def summary_stats(source, outliers=False):
     import subprocess
     csv_files = subprocess.run(f"ls -1v {source}*csv", shell=True,  stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT, universal_newlines=True)
@@ -216,6 +235,8 @@ def summary_stats(source):
         data = read_csv(path)
         data_float = [np.asarray(
             list(filter(None, arr)), dtype=np.float) for arr in data[1:]]
+        if not outliers:
+            data_float = rm_outliers(data_float)
         data_export.append(
             [data[0][1], np.mean(data_float), np.std(data_float)])
     to_csv(data_export, "summary")

@@ -446,7 +446,7 @@ def intercrypt_distance(image, crypts_list):
     cv.imwrite("dist_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
     intercrypt_list = pixel_micrometer(intercrypt_list)
     to_csv(intercrypt_list, ["dist",
-                             "Intercrypt distance", "", "Distance (\u03BCm)"])
+                             "Mean intercrypt distance", "", "Distance (\u03BCm)"])
     min_dist_list = pixel_micrometer(min_dist_list)
     to_csv(min_dist_list, ["min_dist",
                            "Minimal intercrypt distance", "", "Distance (\u03BCm)"])
