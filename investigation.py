@@ -85,20 +85,27 @@ def dist_plot(data, ticks_number=[5, 7], decimals=[2, 3], outliers=False):
         data_float = rm_outliers(data_float)
     plot_style()
     _, ax = plt.subplots(1)
-    x_ticks = ticks_interval(data_float, ticks_number[0], decimals[0])
+    x_ticks = ticks_interval(
+        data_float, ticks_number[0], decimals[0])
     densities = [0]
     for index, img_data in enumerate(data_float[: 2]):
         densities.append(ax.hist(img_data, density=True, bins=x_ticks,
                                  alpha=.85, label=data[index+1][0])[0])
     densities = densities[1:]
-    p = densities[0] / np.asarray(densities[0]).sum()
-    q = densities[1] / np.asarray(densities[1]).sum()
-    entropy_p, max_entropy = shannon_entropy(p)
-    entropy_q, _ = shannon_entropy(q)
+    interval = x_ticks[1]-x_ticks[0]
+    freq_p = densities[0] * interval
+    freq_q = densities[1] * interval
+
+    np.set_printoptions(precision=5)
+    entropy_p, max_entropy_p = shannon_entropy(densities[0], x_ticks)
+    entropy_q, max_entropy_q = shannon_entropy(densities[1], x_ticks)
     print(
-        f"\nS(p): {entropy_p:.3f}\t S(q): {entropy_q:.3f}\t Max(S): {max_entropy:.3f}"
-        f"\nHellinger Distance(p,q):{hellinger_distance(p,q):.3f}"
+        f"\nS(p): {entropy_p:.3f} ({entropy_p/max_entropy_p:.3f})"
+        f"\nS(q): {entropy_q:.3f} ({entropy_q/max_entropy_q:.3f})"
+        f"\nMax(S): {max_entropy_p:.3f} {max_entropy_q:.3f}"
+        f"\nHellinger Distance(p,q):{hellinger_distance(freq_p,freq_q):.3f}"
         "\n")
+    # quit()
     ax.set(title=data[0][1], ylabel="Density", xlabel=data[0][3], xticks=x_ticks,
            yticks=ticks_interval(densities, ticks_number[1], decimals[1]))
     # Optional line | IF decimals 0 >> astype(np.int)
@@ -116,14 +123,21 @@ def dist_plot(data, ticks_number=[5, 7], decimals=[2, 3], outliers=False):
     plt.clf()
 
 
-def shannon_entropy(p):
+def shannon_entropy(densities, ticks):
+    interval = ticks[1]-ticks[0]
+    relative_frequency = densities * interval
+
     entropy = 0
-    for value in p:
-        entropy += value*np.log2(value) if value != 0 else 0
+    for freq in relative_frequency:
+        entropy += freq * np.log2(freq/interval) if freq != 0 else 0
+        # print(
+        #     f'{entropy:.5f}, {freq:.5f}, {freq/interval:.5f}, {np.log2(freq/interval):.5f}')
     entropy *= -1
-    # entropy = -np.sum(np.where(p != 0, p*np.log2(p), 0))
-    uniform = [1/len(p)] * len(p)
-    max_entropy = -np.sum(uniform*np.log2(uniform))
+
+    uniform = 1/(ticks[-1]-ticks[0])
+    # print(f'{interval}, {uniform:.5f}, {ticks[0]}, {ticks[-1]}')
+    max_entropy = -1*np.log2(uniform)
+
     return entropy, max_entropy
 
 
@@ -222,7 +236,12 @@ def ticks_interval(data, quantity, decimals):
     if max(ticks) < max_value:
         ticks = np.append(ticks, ticks[-1]+interval)
     if min(ticks) > min_value:
-        ticks = np.insert(ticks, 0,  ticks[0]-interval)
+        min_tick = ticks[0]-interval
+        if min_tick >= 0:
+            ticks = np.insert(ticks, 0,  min_tick)
+        else:
+            ticks = np.round(np.arange(0, max_value +
+                                       interval, interval), decimals)
     return ticks
 
 
