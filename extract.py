@@ -228,14 +228,14 @@ def cryptometry(source):
     icy += (end-start)
     print(f"Roundness\t\t\t\t {end-start:.2f}")
     start = timer()
-    maximal_feret(image.copy(), crypts_list)
-    # maximal_feret(image.copy(), crypts_list, 'H')
+    # maximal_feret(image.copy(), crypts_list)
+    maximal_feret(image.copy(), crypts_list, 'H')
     end = timer()
     icy += (end-start)
     print(f"Max Feret\t\t\t\t {end-start:.2f}")
     start = timer()
-    wall_thickness(image.copy(), crypts_list)
-    # wall_thickness(image.copy(), crypts_list, 'H')
+    # wall_thickness(image.copy(), crypts_list)
+    wall_thickness(image.copy(), crypts_list, 'H')
     end = timer()
     print(f"Wall Thickness\t\t\t\t {end-start:.2f}")
     start = timer()
@@ -355,7 +355,7 @@ def maximal_feret(image, crypts_list, algorithm='B'):
 
 
 def wall_thickness(image, crypts_list, algorithm='B'):
-    MAX_DIST = 700
+    MAX_DIST = image.shape[0]
     wall_list = [0] * len(crypts_list)
     neighbors_list = neighbors(crypts_list)
     for crypt_index, crypt in enumerate(crypts_list):
@@ -426,7 +426,7 @@ def collinear(slope, first_point, collinear_point):
 
 
 def intercrypt_distance(image, crypts_list):
-    MAX_DIST = 700
+    MAX_DIST = image.shape[0]
     center_list = get_center(crypts_list)
     for center in center_list:
         cv.circle(image,  (center), 7, (115, 158, 0), -1)
