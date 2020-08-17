@@ -30,122 +30,85 @@
 # =============================================================================
 
 # USAGE
-# python investigation.py -f box_plot -p midia/main/1234/data/stitch100/axisr_data.csv
-# python investigation.py -f box_plot -p midia/main/1234/data/stitch100/spher_data.csv -o 0
-# python investigation.py -f hist_plot -p midia/main/BKP/data/AB/axisr_data.csv
-# python investigation.py -f distb_dist -p midia/main/BKP/data/AB/axisr_data.csv
-# python investigation.py -f all_csv -p midia/main/1234/data/stitch100/
-# python investigation.py -f summary -p midia/main/1234/data/016-2017EM-PRE-0-302TR/
-# python investigation.py -f join_csv -p midia/main/1234/data/ -o axis
+# python investigation.py -f box-plot  -p data/0001/perim_data.csv -d 7 2
+# python investigation.py -f hist-plot -p data/0002/perim_data.csv -d 6 6 0 3
+# python investigation.py -f summary   -p data/0003/
+# python investigation.py -f dist-plot -p data/perim_combined_data.csv -d 6 6 0 3
+# python investigation.py -f join-csv  -p data/ -m perim
 
 
 import csv
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
-# Define style plots
-sns.set(context='notebook', style='ticks', palette='bright', font='Arial',
-        font_scale=2, rc={'axes.grid': True, 'grid.linestyle': 'dashed',
-                          'lines.linewidth': 2, 'xtick.direction': 'in',
-                          'ytick.direction': 'in', 'figure.figsize': (7, 3.09017)})
 
 
-def read_csv(data_source):
-    data = []
-    with open(data_source, 'r') as csv_file:
-        reader = csv.reader(csv_file, delimiter=',')
-        for row in reader:
-            data.append(row)
-    return data
+def plot_style():
+    # Define style plots
+    sns.set(context='notebook', style='ticks', palette='colorblind', font='Arial',
+            font_scale=2, rc={'axes.grid': True, 'grid.linestyle': 'dashed',
+                              'lines.linewidth': 2, 'xtick.direction': 'in',
+                              'ytick.direction': 'in', 'figure.figsize': (7, 3.09017)})
 
 
-def to_csv(data, name):
-    with open(f"{name}.csv", mode='w') as csv_file:
-        writer = csv.writer(csv_file, delimiter=',',
-                            quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        for row in data:
-            writer.writerow(row)
-
-
-def all_csv(source):
+def join_csv(source, measure):
     import subprocess
-    csv_files = subprocess.run(f"ls -1v {source}*csv", shell=True,  stdout=subprocess.PIPE,
+    csv_files = subprocess.run(f"ls -1v {source}*/{measure}_data.csv", shell=True,  stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT, universal_newlines=True)
-    for path in csv_files.stdout.splitlines():
-        data = read_csv(path)
-        box_plot(data)
-        print(path)
-
-
-def summary_stats(source):
-    import subprocess
-    csv_files = subprocess.run(f"ls -1v {source}*csv", shell=True,  stdout=subprocess.PIPE,
-                               stderr=subprocess.STDOUT, universal_newlines=True)
-    data_export = [["Parameter", "Mean", "STD"]]
-    for path in csv_files.stdout.splitlines():
-        data = read_csv(path)
-        data_float = [np.asarray(
-            list(filter(None, arr[1:])), dtype=np.float) for arr in data[1:]]
-        data_export.append(
-            [data[0][1], np.mean(data_float), np.std(data_float)])
-    to_csv(data_export, "summary")
-
-
-def join_csv(source, data):
-    # Not working properly
-    import subprocess
-    csv_files = subprocess.run(f"ls -1v {source}*/{data}*", shell=True,  stdout=subprocess.PIPE,
-                               stderr=subprocess.STDOUT, universal_newlines=True)
-    import pandas as pd
     all_files = csv_files.stdout.splitlines()
-    combined_csv = pd.concat([pd.read_csv(f) for f in all_files])
-    combined_csv.to_csv("combined_csv.csv", index=False, encoding='utf-8')
-    # combined_csv.to_csv("combined_csv.csv", index=False, encoding='utf-8-sig')
+
+    data = [read_csv(all_files[0])[0]]
+    for csv_file in all_files:
+        values = read_csv(csv_file)[1]
+        values.insert(0, csv_file)
+        data.append(values)
+
+    to_csv(data, f'{measure}_combined_data')
 
 
-def hist_dist(data, ticks_number=[5, 7], decimals=[0, 3]):
+def rm_outliers(data):
+    clean = []
+    for line in data:
+        ordered = np.sort(line)
+        Q1 = np.quantile(ordered, 0.25)
+        Q3 = np.quantile(ordered, 0.75)
+        IQR = Q3 - Q1
+        clean.append(ordered[(ordered >= Q1 - 1.5*IQR) &
+                             (ordered <= Q3 + 1.5*IQR)])
+    return clean
+
+
+def dist_plot(data, ticks_number=[5, 7], decimals=[2, 3], outliers=False):
     data_float = [np.asarray(list(filter(None, arr[1:])), dtype=np.float)
                   for arr in data[1:]]
-    X_MAX = max(map(max, data_float))
-    X_MIN = min(map(min, data_float))
-    x_interval = np.round((X_MAX - X_MIN) / ticks_number[0], decimals[0])
-    x_ticks = np.round(
-        np.arange(X_MIN, X_MAX+x_interval, x_interval), decimals[0])
-    fig, ax = plt.subplots(1)
+    if not outliers:
+        data_float = rm_outliers(data_float)
+    plot_style()
+    _, ax = plt.subplots(1)
+    x_ticks = ticks_interval(
+        data_float, ticks_number[0], decimals[0])
     densities = [0]
-    for index, img_data in enumerate(data_float):
+    for index, img_data in enumerate(data_float[: 2]):
         densities.append(ax.hist(img_data, density=True, bins=x_ticks,
                                  alpha=.85, label=data[index+1][0])[0])
     densities = densities[1:]
-    p = densities[0] / np.asarray(densities[0]).sum()
-    q = densities[1] / np.asarray(densities[1]).sum()
-    from scipy.stats import wasserstein_distance
+    interval = x_ticks[1]-x_ticks[0]
+    freq_p = densities[0] * interval
+    freq_q = densities[1] * interval
+
+    np.set_printoptions(precision=5)
+    entropy_p, max_entropy_p = shannon_entropy(densities[0], x_ticks)
+    entropy_q, max_entropy_q = shannon_entropy(densities[1], x_ticks)
     print(
-        f"\nShannon(p):\t\t{shannon_entropy(p):.3f} "
-        f"\nShannon(q):\t\t{shannon_entropy(q):.3f} "
-        f"\nHellinger Coef:\t\t{hellinger_coefficient(p,q):.3f}"
-        f"\nHellinger Dist:\t\t{hellinger_distance(p,q):.3f}"
-        # f"\nHellinger E Dist:\t{hellinger_e_distance(p,q):.3f}"
-        f"\nJeffreys Dist:\t\t{jeffreys_distance(p,q):.3f}"
-        f"\nKullback Div:\t\t{kullback_leibler_divergence(p,q):.3f}"
-        f"\nKullbakc Dist:\t\t{jeffrey_divergence(p,q):.3f}"
-        # f"\nJ Div:\t\t\t{jeffrey_e_divergence(p,q):.3f}"
-        "\n---------------"
-        f"\nBhattacharyya Dist:\t{bhattacharyya_distance(p,q):.3f}"
-        f"\nWasserstein Dist:\t{wasserstein_distance(p, q):.3f}"
-        f"\nJensen-Shannon Dist:\t{jensen_shannon_distance(p,q):.3f}"
-        "\n---------------")
-    # quit()
-    Y_MAX = max(map(max, densities))
-    Y_MIN = min(map(min, densities))
-    y_interval = np.round((Y_MAX - Y_MIN) / ticks_number[1], decimals[1])
-    y_ticks = np.round(
-        np.arange(Y_MIN, Y_MAX+y_interval, y_interval), decimals[1])
-    ax.set(title=data[0][1], ylabel="Density",
-           xlabel=data[0][3], xticks=x_ticks, yticks=y_ticks)
+        f"\nS(p): {entropy_p:.3f} ({entropy_p/max_entropy_p:.3f})"
+        f"\nS(q): {entropy_q:.3f} ({entropy_q/max_entropy_q:.3f})"
+        f"\nMax(S): {max_entropy_p:.3f} {max_entropy_q:.3f}"
+        f"\nHellinger Distance(p,q):{hellinger_distance(freq_p,freq_q):.3f}"
+        "\n")
+    ax.set(title=data[0][1], ylabel="Density", xlabel=data[0][3], xticks=x_ticks,
+           yticks=ticks_interval(densities, ticks_number[1], decimals[1]))
     # Optional line | IF decimals 0 >> astype(np.int)
-    ax.set_xticklabels(ax.get_xticks().astype(int), size=17)
+    # ax.set_xticklabels(ax.get_xticks().astype(int), size=17)
     plt.legend(loc='upper right', prop={'size': 12})
     plot = ax.get_figure()
     plot.canvas.draw()
@@ -154,12 +117,24 @@ def hist_dist(data, ticks_number=[5, 7], decimals=[0, 3]):
             label.set_visible(True)
         else:
             label.set_visible(False)
-    plt.savefig(f"{data[0][0]}_plot.tif", dpi=600, bbox_inches="tight")
+    plt.savefig(f"{data[0][0]}_dist_plot.tif",
+                dpi=600, bbox_inches="tight")
     plt.clf()
 
 
-def shannon_entropy(p):
-    return -np.sum(np.where(p != 0, p*np.log2(p), 0))
+def shannon_entropy(densities, ticks):
+    interval = ticks[1]-ticks[0]
+    relative_frequency = densities * interval
+
+    entropy = 0
+    for freq in relative_frequency:
+        entropy += freq * np.log2(freq/interval) if freq != 0 else 0
+    entropy *= -1
+
+    uniform = 1/(ticks[-1]-ticks[0])
+    max_entropy = -1*np.log2(uniform)
+
+    return entropy, max_entropy
 
 
 def jeffreys_distance(p, q):
@@ -189,10 +164,6 @@ def bhattacharyya_distance(p, q):
 
 
 def hellinger_distance(p, q):
-    return np.sqrt(1-hellinger_coefficient(p, q))
-
-
-def hellinger_e_distance(p, q):
     return np.sqrt(np.sum((np.sqrt(p) - np.sqrt(q)) ** 2)) / np.sqrt(2)
 
 
@@ -204,30 +175,17 @@ def jensen_shannon_distance(p, q, a=0.5):
     return np.sqrt(jensen_shannon_divergence)
 
 
-def hist_plot(data, ticks_number=[6, 6], decimals=[3, 3]):
-    data_float = [np.asarray(list(filter(None, arr[1:])), dtype=np.float)
+def hist_plot(data, ticks_number=[6, 6], decimals=[0, 3]):
+    data_float = [np.asarray(list(filter(None, arr)), dtype=np.float)
                   for arr in data[1:]]
-    X_MAX = max(map(max, data_float))
-    X_MIN = min(map(min, data_float))
-    x_interval = np.round((X_MAX - X_MIN) / ticks_number[0], decimals[0])
-    x_ticks = np.round(
-        np.arange(X_MIN, X_MAX+x_interval, x_interval), decimals[0])
-    fig, ax = plt.subplots(1)
-    densities = [0]
-    for index, img_data in enumerate(data_float):
-        densities.append(ax.hist(img_data, density=True, bins=x_ticks,
-                                 alpha=.85, label=data[index+1][0])[0])
-    densities = densities[1:]
-    Y_MAX = max(map(max, densities))
-    Y_MIN = min(map(min, densities))
-    y_interval = np.round((Y_MAX - Y_MIN) / ticks_number[1], decimals[1])
-    y_ticks = np.round(
-        np.arange(Y_MIN, Y_MAX+y_interval, y_interval), decimals[1])
-    ax.set(title=data[0][1], ylabel="Density",
-           xlabel=data[0][3], xticks=x_ticks, yticks=y_ticks)
+    plot_style()
+    _, ax = plt.subplots(1)
+    x_ticks = ticks_interval(data_float, ticks_number[0], decimals[0])
+    densities = ax.hist(data_float, density=True, bins=x_ticks, alpha=.85)[0]
+    ax.set(title=data[0][1], ylabel="Density", xlabel=data[0][3], xticks=x_ticks,
+           yticks=ticks_interval([densities], ticks_number[1], decimals[1]))
     # Optional line | IF decimals 0 >> astype(np.int)
-    ax.set_xticklabels(ax.get_xticks().astype(np.int), size=16)
-    plt.legend(loc='upper right', prop={'size': 12})
+    # ax.set_xticklabels(ax.get_xticks().astype(np.int), size=16)
     plot = ax.get_figure()
     plot.canvas.draw()
     for index, label in enumerate(ax.get_yticklabels()):
@@ -235,21 +193,24 @@ def hist_plot(data, ticks_number=[6, 6], decimals=[3, 3]):
             label.set_visible(True)
         else:
             label.set_visible(False)
-    plt.savefig(f"{data[0][0]}_plot.tif", dpi=600, bbox_inches="tight")
+    plt.savefig(f"{data[0][0]}_hist_plot.tif",
+                dpi=600, bbox_inches="tight")
     plt.clf()
 
 
-def box_plot(data, ticks_number=10, decimals=1):
-    data_float = [np.asarray(list(filter(None, arr[1:])), dtype=np.float)
-                  for arr in data[1:]]
-    ax = sns.boxplot(data=data_float, width=0.45,
-                     palette=["C0"])
-    ax.set(title=data[0][1], xlabel=data[0][2],
-           ylabel=data[0][3], xticklabels=list(np.asarray(data)[1:, 0]))
-    interval = round((max(data_float[0]) - min(data_float[0])) /
-                     ticks_number, decimals)
-    ax.yaxis.set_major_locator(ticker.MultipleLocator(interval))
-    ax.yaxis.set_major_formatter(ticker.ScalarFormatter())
+def box_plot(data, ticks_number=7, decimals=2):
+    if len(data) > 2:
+        x_labels = list(np.asarray(data)[1:, 0])
+        data_float = [np.asarray(list(filter(None, arr[1:])), dtype=np.float)
+                      for arr in data[1:]]
+    else:
+        x_labels = ''
+        data_float = [np.asarray(list(filter(None, arr)), dtype=np.float)
+                      for arr in data[1:]]
+    plot_style()
+    ax = sns.boxplot(data=data_float, width=0.45)
+    ax.set(title=data[0][1], xlabel=data[0][2], ylabel=data[0][3],
+           xticklabels=x_labels, yticks=ticks_interval(data_float, ticks_number, decimals))
     plot = ax.get_figure()
     plot.canvas.draw()
     for index, label in enumerate(ax.get_yticklabels()):
@@ -257,8 +218,60 @@ def box_plot(data, ticks_number=10, decimals=1):
             label.set_visible(True)
         else:
             label.set_visible(False)
-    plot.savefig(f"{data[0][0]}_plot.tif", dpi=600, bbox_inches="tight")
+    plot.savefig(f"{data[0][0]}_box_plot.tif",
+                 dpi=600, bbox_inches="tight")
     plt.clf()
+
+
+def ticks_interval(data, quantity, decimals):
+    max_value = max(map(max, data))
+    min_value = min(map(min, data))
+    interval = np.round((max_value - min_value) / quantity, decimals)
+    ticks = np.round(np.arange(min_value, max_value +
+                               interval, interval), decimals)
+    if max(ticks) < max_value:
+        ticks = np.append(ticks, ticks[-1]+interval)
+    if min(ticks) > min_value:
+        min_tick = ticks[0]-interval
+        if min_tick >= 0:
+            ticks = np.insert(ticks, 0,  min_tick)
+        else:
+            ticks = np.round(np.arange(0, max_value +
+                                       interval, interval), decimals)
+    return ticks
+
+
+def summary_stats(source, outliers=False):
+    import subprocess
+    csv_files = subprocess.run(f"ls -1v {source}*csv", shell=True,  stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT, universal_newlines=True)
+    data_export = [["Parameter", "Mean", "STD"]]
+    for path in csv_files.stdout.splitlines():
+        data = read_csv(path)
+        data_float = [np.asarray(
+            list(filter(None, arr)), dtype=np.float) for arr in data[1:]]
+        if not outliers:
+            data_float = rm_outliers(data_float)
+        data_export.append(
+            [data[0][1], np.mean(data_float), np.std(data_float)])
+    to_csv(data_export, "summary")
+
+
+def read_csv(data_source):
+    data = []
+    with open(data_source, 'r') as csv_file:
+        reader = csv.reader(csv_file, delimiter=',')
+        for row in reader:
+            data.append(row)
+    return data
+
+
+def to_csv(data, name='data'):
+    with open(f"{name}.csv", mode='w') as csv_file:
+        writer = csv.writer(csv_file, delimiter=',',
+                            quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        for row in data:
+            writer.writerow(row)
 
 
 def main():
@@ -268,31 +281,37 @@ def main():
                     help="Set a function to call (box_plot, freq_plot)")
     ap.add_argument("-p", "--path", type=str, required=False,
                     help="Input file or directory of images path")
-    ap.add_argument("-o", "--optional", type=str, required=False,
-                    help="Optional parameter for functions")
+    ap.add_argument("-d", "--decimals", nargs='+', type=int, required=False,
+                    help="Define number of decimals for plots ticks")
+    ap.add_argument("-m", "--measure", type=str, required=False,
+                    help="Set measure to join CSV files")
+
     args = vars(ap.parse_args())
     function = args["function"]
     source = args["path"]
+    decimals = args["decimals"]
 
-    if (function == "box_plot"):
+    if (function == "box-plot"):
         data = read_csv(source)
-        decimals = args["optional"]
         if decimals is None:
             box_plot(data)
         else:
-            box_plot(data, decimals=int(decimals))
-    elif (function == "hist_plot"):
+            box_plot(data, ticks_number=decimals[0], decimals=decimals[1])
+    elif (function == "hist-plot"):
         data = read_csv(source)
-        hist_plot(data)
-    elif (function == "all_csv"):
-        all_csv(source)
-    elif (function == "join_csv"):
-        data = args["optional"]
-        join_csv(source, data)
-    elif (function == "distb_dist"):
+        if decimals is None:
+            hist_plot(data)
+        else:
+            hist_plot(data, ticks_number=decimals[:2], decimals=decimals[2:])
+    elif (function == "dist-plot"):
         data = read_csv(source)
-        # distribution_distance(data)
-        hist_dist(data)
+        if decimals is None:
+            dist_plot(data)
+        else:
+            dist_plot(data, ticks_number=decimals[:2], decimals=decimals[2:])
+    elif (function == "join-csv"):
+        measure = args["measure"]
+        join_csv(source, measure)
     elif (function == "summary"):
         summary_stats(source)
     else:
