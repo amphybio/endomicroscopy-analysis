@@ -264,15 +264,12 @@ def density(image, crypts_list):
 
 def roundness(crypts_list):
     roundness_list = []
-    angle_list = []
     for crypt in crypts_list:
         area = cv.contourArea(crypt)
         rect = cv.minAreaRect(crypt)
         (x, y), (width, height), angle = rect
-        angle_list.append(angle)
         major_axis = max(width, height)
         roundness_list.append((4*(area/(np.pi * (major_axis ** 2))))*100)
-    to_csv(angle_list, ["angle", "Crypts angles", "", "Angles (degrees)"])
     to_csv(roundness_list, ["round", "Crypts roundness", "", "Roundness (%)"])
 
 
