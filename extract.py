@@ -228,7 +228,7 @@ def cryptometry(source):
     print(f"Max Feret\t\t\t\t {end-start:.2f}")
     start = timer()
     neighbors_list = neighbors(crypts_list, mean_feret)
-    # wall_thickness(image.copy(), crypts_list)
+    # wall_thickness(image.copy(), crypts_list, neighbors_list)
     wall_thickness(image.copy(), crypts_list, neighbors_list, 'H')
     end = timer()
     print(f"Wall Thickness\t\t\t\t {end-start:.2f}")
@@ -247,11 +247,9 @@ def cryptometry(source):
 
 
 def density(image, crypts_list):
-    crypts_img = np.zeros(image.shape[:-1], np.uint8)
+    crypts_area = 0
     for crypt in crypts_list:
-        cv.drawContours(crypts_img, [crypt], -1, (255),
-                        thickness=-1)
-    crypts_area = np.sum(crypts_img == 255)
+        crypts_area += ellipse_area(crypt)
 
     _, thresh = cv.threshold(image, 1, 255, cv.THRESH_BINARY)
     thresh = cv.cvtColor(thresh, cv.COLOR_BGR2GRAY)
@@ -265,10 +263,8 @@ def density(image, crypts_list):
 def roundness(crypts_list):
     roundness_list = []
     for crypt in crypts_list:
-        area = cv.contourArea(crypt)
-        rect = cv.minAreaRect(crypt)
-        (x, y), (width, height), angle = rect
-        major_axis = max(width, height)
+        major_axis, _ = ellipse_axis(crypt)
+        area = ellipse_area(crypt)
         roundness_list.append((4*(area/(np.pi * (major_axis ** 2))))*100)
     to_csv(roundness_list, ["round", "Crypts roundness", "", "Roundness (%)"])
 
@@ -276,11 +272,11 @@ def roundness(crypts_list):
 def elongation_factor(image, crypts_list):
     elongation_list = []
     for crypt in crypts_list:
+        major_axis, minor_axis = ellipse_axis(crypt)
+        elongation_list.append(major_axis/minor_axis)
         rect = cv.minAreaRect(crypt)
         box = cv.boxPoints(rect)
         box = np.int0(box)
-        (x, y), (width, height), angle = rect
-        elongation_list.append(max(width, height)/min(width, height))
         cv.drawContours(image, [box], 0, (115, 158, 0), 12)
     cv.imwrite("elong_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
     to_csv(elongation_list, ["elong", "Elongation factor", "", "Ratio"])
@@ -460,15 +456,37 @@ def perimeter(image, crypts_list):
     perim_list = []
     spher_list = []
     for crypt in crypts_list:
-        perimeter = cv.arcLength(crypt, True)
+        major_axis, minor_axis = ellipse_axis(crypt)
+        perimeter = ellipse_perimeter((major_axis / 2), (minor_axis / 2))
         perim_list.append(perimeter)
-        area = cv.contourArea(crypt)
+        area = ellipse_area(crypt)
         spher_list.append((4 * np.pi * area) / (perimeter ** 2)*100)
     cv.imwrite("perim_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
     perim_list = pixel_micrometer(perim_list)
     to_csv(perim_list, ["perim", "Crypts Perimeter",
                         "", "Perimeter (\u03BCm)"])
     to_csv(spher_list, ["spher", "Crypts sphericity", "", "Sphericity (%)"])
+
+
+def ellipse_area(crypt):
+    major_axis, minor_axis = ellipse_axis(crypt)
+    return np.pi * (major_axis / 2) * (minor_axis / 2)
+
+
+def ellipse_axis(crypt):
+    rect = cv.minAreaRect(crypt)
+    (x, y), (width, height), angle = rect
+    return max(width, height), min(width, height)
+
+
+def ellipse_perimeter(a, b, n=10):
+    h = ((a-b)**2)/((a+b)**2)
+    summation = 0
+    import math
+    for i in range(n):
+        summation += ((math.gamma(0.5+1)/(math.factorial(i) *
+                                          math.gamma((0.5+1)-i)))**2)*(np.power(h, i))
+    return np.pi * (a+b) * summation
 
 
 def axis_ratio(image, crypts_list):
