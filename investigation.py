@@ -105,7 +105,6 @@ def dist_plot(data, ticks_number=[5, 7], decimals=[2, 3], outliers=False):
         f"\nMax(S): {max_entropy_p:.3f} {max_entropy_q:.3f}"
         f"\nHellinger Distance(p,q):{hellinger_distance(freq_p,freq_q):.3f}"
         "\n")
-    # quit()
     ax.set(title=data[0][1], ylabel="Density", xlabel=data[0][3], xticks=x_ticks,
            yticks=ticks_interval(densities, ticks_number[1], decimals[1]))
     # Optional line | IF decimals 0 >> astype(np.int)
@@ -130,12 +129,9 @@ def shannon_entropy(densities, ticks):
     entropy = 0
     for freq in relative_frequency:
         entropy += freq * np.log2(freq/interval) if freq != 0 else 0
-        # print(
-        #     f'{entropy:.5f}, {freq:.5f}, {freq/interval:.5f}, {np.log2(freq/interval):.5f}')
     entropy *= -1
 
     uniform = 1/(ticks[-1]-ticks[0])
-    # print(f'{interval}, {uniform:.5f}, {ticks[0]}, {ticks[-1]}')
     max_entropy = -1*np.log2(uniform)
 
     return entropy, max_entropy
@@ -316,8 +312,6 @@ def main():
     elif (function == "join-csv"):
         measure = args["measure"]
         join_csv(source, measure)
-    # elif (function == "all_csv"):
-    #     all_csv(source)
     elif (function == "summary"):
         summary_stats(source)
     else:
@@ -326,14 +320,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-# python investigation.py -f all_csv -p midia/main/1234/data/stitch100/
-
-# def all_csv(source):
-#     import subprocess
-#     csv_files = subprocess.run(f"ls -1v {source}*csv", shell=True,  stdout=subprocess.PIPE,
-#                                stderr=subprocess.STDOUT, universal_newlines=True)
-#     for path in csv_files.stdout.splitlines():
-#         data = read_csv(path)
-#         box_plot(data)
-#         print(path)
