@@ -212,15 +212,16 @@ def cryptometry(source):
     start = timer()
     perimeter(image.copy(), crypts_list)
     end = timer()
-    print(f"Perimeter and Sphericity\t\t {end-start:.2f}")
+    print(f"Perimeter, Spher and Round \t\t {end-start:.2f}")
+    # print(f"Perimeter and Sphericity\t\t {end-start:.2f}")
     start = timer()
     elongation_factor(image.copy(), crypts_list)
     end = timer()
     print(f"Elongation factor\t\t\t {end-start:.2f}")
-    start = timer()
-    roundness(crypts_list)
-    end = timer()
-    print(f"Roundness\t\t\t\t {end-start:.2f}")
+    # start = timer()
+    # roundness(crypts_list)
+    # end = timer()
+    # print(f"Roundness\t\t\t\t {end-start:.2f}")
     start = timer()
     # mean_feret = maximal_feret(image.copy(), crypts_list)
     mean_feret = maximal_feret(image.copy(), crypts_list, 'H')
@@ -260,13 +261,13 @@ def density(image, crypts_list):
            ["density", "Density", "", "Ratio"])
 
 
-def roundness(crypts_list):
-    roundness_list = []
-    for crypt in crypts_list:
-        major_axis, _ = ellipse_axis(crypt)
-        area = ellipse_area(crypt)
-        roundness_list.append((4*(area/(np.pi * (major_axis ** 2))))*100)
-    to_csv(roundness_list, ["round", "Crypts roundness", "", "Roundness (%)"])
+# def roundness(crypts_list):
+#     roundness_list = []
+#     for crypt in crypts_list:
+#         major_axis, _ = ellipse_axis(crypt)
+#         area = ellipse_area(crypt)
+#         roundness_list.append((4*(area/(np.pi * (major_axis ** 2))))*100)
+#     to_csv(roundness_list, ["round", "Crypts roundness", "", "Roundness (%)"])
 
 
 def elongation_factor(image, crypts_list):
@@ -455,17 +456,23 @@ def get_center(crypts_list):
 def perimeter(image, crypts_list):
     perim_list = []
     spher_list = []
+    roundness_list = []
     for crypt in crypts_list:
         major_axis, minor_axis = ellipse_axis(crypt)
         perimeter = ellipse_perimeter((major_axis / 2), (minor_axis / 2))
+        perimeter = pixel_micrometer(perimeter, is_list=False)
         perim_list.append(perimeter)
         area = ellipse_area(crypt)
+        area = pixel_micrometer(area, ((51**2), (20**2)), is_list=False)
         spher_list.append((4 * np.pi * area) / (perimeter ** 2)*100)
+        major_axis = pixel_micrometer(major_axis, is_list=False)
+        roundness_list.append((4*(area/(np.pi * (major_axis ** 2))))*100)
     cv.imwrite("perim_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
-    perim_list = pixel_micrometer(perim_list)
+    # perim_list = pixel_micrometer(perim_list)
     to_csv(perim_list, ["perim", "Crypts Perimeter",
                         "", "Perimeter (\u03BCm)"])
     to_csv(spher_list, ["spher", "Crypts sphericity", "", "Sphericity (%)"])
+    to_csv(roundness_list, ["round", "Crypts roundness", "", "Roundness (%)"])
 
 
 def ellipse_area(crypt):
