@@ -210,18 +210,13 @@ def cryptometry(source):
     end = timer()
     print(f"Axis ratio\t\t\t\t {end-start:.2f}")
     start = timer()
-    perimeter(image.copy(), crypts_list)
+    perimeter_shape(image.copy(), crypts_list)
     end = timer()
-    print(f"Perimeter, Spher and Round \t\t {end-start:.2f}")
-    # print(f"Perimeter and Sphericity\t\t {end-start:.2f}")
+    print(f"Perimeter, Sphericity and Roundness \t {end-start:.2f}")
     start = timer()
     elongation_factor(image.copy(), crypts_list)
     end = timer()
     print(f"Elongation factor\t\t\t {end-start:.2f}")
-    # start = timer()
-    # roundness(crypts_list)
-    # end = timer()
-    # print(f"Roundness\t\t\t\t {end-start:.2f}")
     start = timer()
     # mean_feret = maximal_feret(image.copy(), crypts_list)
     mean_feret = maximal_feret(image.copy(), crypts_list, 'H')
@@ -259,15 +254,6 @@ def density(image, crypts_list):
     density = [crypts_area/background_area]
     to_csv(density,
            ["density", "Density", "", "Ratio"])
-
-
-# def roundness(crypts_list):
-#     roundness_list = []
-#     for crypt in crypts_list:
-#         major_axis, _ = ellipse_axis(crypt)
-#         area = ellipse_area(crypt)
-#         roundness_list.append((4*(area/(np.pi * (major_axis ** 2))))*100)
-#     to_csv(roundness_list, ["round", "Crypts roundness", "", "Roundness (%)"])
 
 
 def elongation_factor(image, crypts_list):
@@ -453,7 +439,7 @@ def get_center(crypts_list):
     return center_list
 
 
-def perimeter(image, crypts_list):
+def perimeter_shape(image, crypts_list):
     perim_list = []
     spher_list = []
     roundness_list = []
@@ -468,7 +454,6 @@ def perimeter(image, crypts_list):
         major_axis = pixel_micrometer(major_axis, is_list=False)
         roundness_list.append((4*(area/(np.pi * (major_axis ** 2))))*100)
     cv.imwrite("perim_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
-    # perim_list = pixel_micrometer(perim_list)
     to_csv(perim_list, ["perim", "Crypts Perimeter",
                         "", "Perimeter (\u03BCm)"])
     to_csv(spher_list, ["spher", "Crypts sphericity", "", "Sphericity (%)"])
@@ -522,13 +507,17 @@ def pixel_micrometer(value_pixel, ratio=(51, 20), is_list=True):
         return (MICROMETER * value_pixel) / PIXEL
 
 
-def to_csv(data, labels):
+def to_csv(data, labels, is_list=False):
     import csv
     with open(f"{labels[0]}_data.csv", mode='w') as csv_file:
         writer = csv.writer(csv_file, delimiter=',',
                             quotechar='"', quoting=csv.QUOTE_MINIMAL)
         writer.writerow(labels)
-        writer.writerow(data)
+        if not is_list:
+            writer.writerow(data)
+        else:
+            for row in data:
+                writer.writerow(row)
 
 
 def draw_countours(image, crypts_list):

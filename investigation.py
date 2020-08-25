@@ -169,7 +169,7 @@ def hellinger_distance(p, q):
     return np.sqrt(1-bhattacharyya_coefficient(p, q))
 
 
-def hellinger_distanceOLD(p, q):
+def hellinger_e_distance(p, q):
     return np.sqrt(np.sum((np.sqrt(p) - np.sqrt(q)) ** 2)) / np.sqrt(2)
 
 
