@@ -96,7 +96,51 @@ def send_sandbox(path, dest_path):
     return key_sand
 
 
-def video_frame(source):
+def mosaic(source, imagej="/opt/Fiji.app/ImageJ-linux64"):
+    files = subprocess.run(f"find {source} -type f -name *mp4", shell=True,  stdout=subprocess.PIPE,
+                           stderr=subprocess.STDOUT, universal_newlines=True)
+    import pathlib
+    for video_source in files.stdout.splitlines():
+        path = pathlib.Path(video_source)
+        dir_structure(path, ["frame"])
+        sub_dir = path.parents[0] / "frame" / path.stem
+        video_frame(video_source, sub_dir)
+        rvss_dir = sub_dir / "rvss"
+        rvss_dir.mkdir()
+        rvsx_dir = sub_dir / "rvss-xml"
+        rvsx_dir.mkdir()
+        imagej_rvss(imagej, sub_dir, rvss_dir, rvsx_dir)
+        quit()
+    return
+
+
+def imagej_rvss(imagej, source, output_path, xml):
+    cmd = (f"{imagej} --ij2 --headless --console --run rvss.py "
+           f"'source=\"{source}/\", output=\"{output_path}/\", xml=\"{xml}/\"'")
+    print(cmd)
+    rvss = subprocess.run(cmd, shell=True,  stdout=subprocess.PIPE,
+                          stderr=subprocess.STDOUT, universal_newlines=True)
+    print(rvss.stdout)
+    return
+
+
+def video_frame(source, output_path):
+    # Convert a video to frame images
+    vidcap = cv.VideoCapture(source)
+    success, image = vidcap.read()
+    count = 0
+    while success:
+        gray_frame = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+        image = remove_text(gray_frame)
+        cv.imwrite(f"{str(output_path)}/frame{count:03d}.png", image)
+        success, image = vidcap.read()
+        count += 1
+        if count > 101:
+            break
+    print(f"Finished: {source}")
+
+
+def video_frameOLD(source):
     # Convert a video to frame images
     files = subprocess.run(f"find {source} -type f -name *mp4", shell=True,  stdout=subprocess.PIPE,
                            stderr=subprocess.STDOUT, universal_newlines=True)
@@ -536,7 +580,8 @@ def main():
     function = args["function"]
     source = args["path"]
     if (function == "video-frame"):
-        video_frame(source)
+        # video_frame(source)
+        mosaic(source)
     elif (function == "cryptometry"):
         cryptometry(source)
     else:
