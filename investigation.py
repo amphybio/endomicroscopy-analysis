@@ -87,6 +87,7 @@ def dist_plot(data, ticks_number=[5, 7], decimals=[2, 3], outliers=False):
     _, ax = plt.subplots(1)
     x_ticks = ticks_interval(
         data_float, ticks_number[0], decimals[0])
+    # x_ticks[-1] = 100
     densities = [0]
     for index, img_data in enumerate(data_float[: 2]):
         densities.append(ax.hist(img_data, density=True, bins=x_ticks,
@@ -103,7 +104,8 @@ def dist_plot(data, ticks_number=[5, 7], decimals=[2, 3], outliers=False):
         f"\nS(p): {entropy_p:.3f} ({entropy_p/max_entropy_p:.3f})"
         f"\nS(q): {entropy_q:.3f} ({entropy_q/max_entropy_q:.3f})"
         f"\nMax(S): {max_entropy_p:.3f} {max_entropy_q:.3f}"
-        f"\nHellinger Distance(p,q):{hellinger_distance(freq_p,freq_q):.3f}"
+        f"\nHellinger Distance(p,q):{hellinger_distance( freq_p, freq_q):.3f}"
+        # f"\nHellinger Distance(p,q):{hellinger_distance( densities[0],densities[1]):.3f}"
         "\n")
     ax.set(title=data[0][1], ylabel="Density", xlabel=data[0][3], xticks=x_ticks,
            yticks=ticks_interval(densities, ticks_number[1], decimals[1]))
@@ -155,15 +157,19 @@ def jeffrey_e_divergence(p, q):
     return np.sum((p-q)*np.log2(p/q))
 
 
-def hellinger_coefficient(p, q):
+def bhattacharyya_coefficient(p, q):
     return np.sum(np.sqrt(p*q))
 
 
 def bhattacharyya_distance(p, q):
-    return -np.log(hellinger_coefficient(p, q))
+    return -np.log(bhattacharyya_coefficient(p, q))
 
 
 def hellinger_distance(p, q):
+    return np.sqrt(1-bhattacharyya_coefficient(p, q))
+
+
+def hellinger_e_distance(p, q):
     return np.sqrt(np.sum((np.sqrt(p) - np.sqrt(q)) ** 2)) / np.sqrt(2)
 
 
