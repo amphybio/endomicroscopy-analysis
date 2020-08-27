@@ -19,8 +19,7 @@
 #   DESCRIPTION: Script to extract features of endomicroscopy images
 #
 #       OPTIONS:   -f FUNCTION, --function FUNCTION
-#                     Set a function to call (video_frame; video_frame_crop,
-#                       cryptometry)
+#                     Set a function to call (mosaic; stack; cryptometry)
 #                  -p PATH, --path PATH
 #                     Input file or directory of images path
 #  REQUIREMENTS:  OpenCV, Python, Numpy
