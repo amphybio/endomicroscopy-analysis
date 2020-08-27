@@ -69,7 +69,7 @@ def dir_exists(path):
             main_index = hierarchy.index("main")
             path_index = len(hierarchy)-(2 + max(0, main_index-1))
             print("Directory was sent to sandbox! Code: "
-                  f"{send_sandbox(path, (path.parents[path_index] / 'sandbox' / hierarchy[main_index+1]))}")
+                  f"{zip_move(path, (path.parents[path_index] / 'sandbox' / hierarchy[main_index+1]))}")
         elif option == "n":
             subprocess.run(f"rm -rf {str(path.resolve())}", shell=True,
                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
@@ -79,7 +79,7 @@ def dir_exists(path):
             sys.exit()
 
 
-def send_sandbox(path, dest_path):
+def zip_move(path, dest_path):
     if not dest_path.is_dir():
         dest_path.mkdir()
     count = subprocess.run("find . -maxdepth 1 -type f | wc -l", cwd=dest_path,
@@ -110,7 +110,22 @@ def mosaic(source, imagej="/opt/Fiji.app/ImageJ-linux64"):
         rvsx_dir = sub_dir / "rvss-xml"
         rvsx_dir.mkdir()
         imagej_rvss(imagej, sub_dir, rvss_dir, rvsx_dir)
-        quit()
+        stack_frames(rvss_dir, path.stem)
+        zip_move(sub_dir, path.parents[0] / "frame")
+    subprocess.run(f"mv -vn *tif {str(path.parents[0])}", shell=True,
+                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+    quit()
+    return
+
+
+def stack_frames(source, video_id):
+    files = subprocess.run(f"find {source} -type f -name '*tif'", shell=True,  stdout=subprocess.PIPE,
+                           stderr=subprocess.STDOUT, universal_newlines=True)
+    stack = cv.imread(files.stdout.splitlines()[0])
+    for image_source in files.stdout.splitlines()[1:]:
+        image = cv.imread(image_source)
+        stack = cv.max(stack, image)
+    cv.imwrite(f"{video_id}.tif", stack)
     return
 
 
@@ -120,8 +135,8 @@ def imagej_rvss(imagej, source, output_path, xml):
     print(cmd)
     rvss = subprocess.run(cmd, shell=True,  stdout=subprocess.PIPE,
                           stderr=subprocess.STDOUT, universal_newlines=True)
-    print(rvss.stdout)
-    return
+    print(rvss.stdout, type(rvss.stdout))
+    return rvss.stdout
 
 
 def video_frame(source, output_path):
@@ -135,8 +150,8 @@ def video_frame(source, output_path):
         cv.imwrite(f"{str(output_path)}/frame{count:03d}.png", image)
         success, image = vidcap.read()
         count += 1
-        if count > 101:
-            break
+        # if count > 101:
+        #     break
     print(f"Finished: {source}")
 
 
