@@ -19,8 +19,7 @@
 #   DESCRIPTION: Script to extract features of endomicroscopy images
 #
 #       OPTIONS:   -f FUNCTION, --function FUNCTION
-#                     Set a function to call (video_frame; video_frame_crop,
-#                       cryptometry)
+#                     Set a function to call (mosaic; stack; cryptometry)
 #                  -p PATH, --path PATH
 #                     Input file or directory of images path
 #  REQUIREMENTS:  OpenCV, Python, Numpy
@@ -33,7 +32,8 @@
 # =============================================================================
 
 # USAGE
-# python extract.py -f video-frame -p midia/main/0000/
+# python extract.py -f mosaic -p midia/main/0000/
+# python extract.py -f stack -p midia/main/0000/frame/016-2017EM-PRE/rvss -i 100 200
 # python extract.py -f cryptometry -p midia/main/0000/016-2017EM-PRE-0-302TR.tif
 
 import cv2 as cv
@@ -69,7 +69,7 @@ def dir_exists(path):
             main_index = hierarchy.index("main")
             path_index = len(hierarchy)-(2 + max(0, main_index-1))
             print("Directory was sent to sandbox! Code: "
-                  f"{send_sandbox(path, (path.parents[path_index] / 'sandbox' / hierarchy[main_index+1]))}")
+                  f"{zip_move(path, (path.parents[path_index] / 'sandbox' / hierarchy[main_index+1]))}")
         elif option == "n":
             subprocess.run(f"rm -rf {str(path.resolve())}", shell=True,
                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
@@ -79,7 +79,7 @@ def dir_exists(path):
             sys.exit()
 
 
-def send_sandbox(path, dest_path):
+def zip_move(path, dest_path):
     if not dest_path.is_dir():
         dest_path.mkdir()
     count = subprocess.run("find . -maxdepth 1 -type f | wc -l", cwd=dest_path,
@@ -96,8 +96,7 @@ def send_sandbox(path, dest_path):
     return key_sand
 
 
-def video_frame(source):
-    # Convert a video to frame images
+def mosaic(source, imagej="/opt/Fiji.app/ImageJ-linux64"):
     files = subprocess.run(f"find {source} -type f -name *mp4", shell=True,  stdout=subprocess.PIPE,
                            stderr=subprocess.STDOUT, universal_newlines=True)
     import pathlib
@@ -105,16 +104,88 @@ def video_frame(source):
         path = pathlib.Path(video_source)
         dir_structure(path, ["frame"])
         sub_dir = path.parents[0] / "frame" / path.stem
-        vidcap = cv.VideoCapture(video_source)
+        video_frame(video_source, sub_dir)
+        rvss_dir = sub_dir / "rvss"
+        rvss_dir.mkdir()
+        rvsx_dir = sub_dir / "rvss-xml"
+        rvsx_dir.mkdir()
+        if imagej_rvss(imagej, sub_dir, rvss_dir, rvsx_dir):
+            stack_frames(rvss_dir, path.stem)
+        zip_id = zip_move(sub_dir, path.parents[0] / "frame")
+        print(f"Directory {source} was zipped! Code: {zip_id}")
+    subprocess.run(f"mv -vn *tif {str(path.parents[0])}", shell=True,
+                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+
+
+def stack_frames(source, video_id):
+    output = subprocess.run(f"find {source} -type f -name '*tif'", shell=True,  stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, universal_newlines=True)
+    files = output.stdout.splitlines()
+    files.sort()
+    stack = cv.imread(files[0])
+    for image_source in files[1:]:
+        image = cv.imread(image_source)
+        stack = cv.max(stack, image)
+    cv.imwrite(f"{video_id}.tif", stack)
+    print(f"Finished stack slices: {source}")
+
+
+def substack_frames(source, video_id, interval):
+    output = subprocess.run(f"find {source} -type f -name '*tif'", shell=True,  stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, universal_newlines=True)
+    files = output.stdout.splitlines()
+    files.sort()
+    stack = cv.imread(files[interval[0]])
+    for image_source in files[interval[0]:interval[1]]:
+        image = cv.imread(image_source)
+        stack = cv.max(stack, image)
+    cv.imwrite(f"{video_id}.tif", stack)
+    print(f"Finished stack slices: {source}")
+
+
+def imagej_rvss(imagej, source, output_path, xml, attempt=0):
+    imj_cmd = (f"{imagej} --ij2 --headless --console --run rvss.py "
+               f"'source=\"{source}/\", output=\"{output_path}/\", xml=\"{xml}/\"'")
+    rvss = subprocess.run(imj_cmd, shell=True,  stdout=subprocess.PIPE,
+                          stderr=subprocess.STDOUT, universal_newlines=True)
+    log = rvss.stdout
+    if 'No features model found' in log:
+        if attempt < 1:
+            begin = log.find('frame')+5
+            end = log.find('.png')
+            first = int(log[begin:end])-1
+            print(f"RVSS error: No features model found: frame{first+1}.png"
+                  f"\nRetaking with less frames. Range: 0..{first}")
+            count = subprocess.run("find . -maxdepth 1 -type f -name '*png' | wc -l", cwd=source,
+                                   shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+            last = int(count.stdout)
+            for index in range(first, last):
+                rm_cmd = f"rm -rf {str(source.resolve())}/frame{index}.png"
+                subprocess.run(rm_cmd, shell=True,  stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT, universal_newlines=True)
+            subprocess.run(f"rm -rf {str(output_path)}/", shell=True,
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+            output_path.mkdir()
+            return imagej_rvss(imagej, source, output_path, xml, attempt+1)
+        else:
+            print("RVSS attempt error: No features model found. Exiting...")
+            return False
+    print(f"Finished RVSS: {output_path}")
+    return True
+
+
+def video_frame(source, output_path):
+    # Convert a video to frame images
+    vidcap = cv.VideoCapture(source)
+    success, image = vidcap.read()
+    count = 0
+    while success:
+        gray_frame = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+        image = remove_text(gray_frame)
+        cv.imwrite(f"{str(output_path)}/frame{count:03d}.png", image)
         success, image = vidcap.read()
-        count = 0
-        while success:
-            gray_frame = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
-            image = remove_text(gray_frame)
-            cv.imwrite(f"{str(sub_dir)}/frame{count:03d}.png", image)
-            success, image = vidcap.read()
-            count += 1
-        print(f"Finished: {video_source}")
+        count += 1
+    print(f"Finished frames: {source}")
 
 
 def remove_text(image):
@@ -532,11 +603,18 @@ def main():
                     help="Set a function to call (video_frame; video_frame_crop, cryptometry)")
     ap.add_argument("-p", "--path", type=str, required=False,
                     help="Input file or directory of images path")
+    ap.add_argument("-i", "--interval", nargs='+', type=int, required=False,
+                    help="Define range of frames to stack")
     args = vars(ap.parse_args())
     function = args["function"]
     source = args["path"]
-    if (function == "video-frame"):
-        video_frame(source)
+    interval = args["interval"]
+
+    if (function == "mosaic"):
+        mosaic(source)
+    elif (function == "stack"):
+        name = f'stack-{interval[0]}-{interval[1]}'
+        substack_frames(source, name, interval)
     elif (function == "cryptometry"):
         cryptometry(source)
     else:
