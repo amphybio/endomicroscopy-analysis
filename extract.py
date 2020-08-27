@@ -109,12 +109,13 @@ def mosaic(source, imagej="/opt/Fiji.app/ImageJ-linux64"):
         rvss_dir.mkdir()
         rvsx_dir = sub_dir / "rvss-xml"
         rvsx_dir.mkdir()
-        imagej_rvss(imagej, sub_dir, rvss_dir, rvsx_dir)
-        stack_frames(rvss_dir, path.stem)
-        zip_move(sub_dir, path.parents[0] / "frame")
+        if imagej_rvss(imagej, sub_dir, rvss_dir, rvsx_dir):
+            stack_frames(rvss_dir, path.stem)
+        zip_id = zip_move(sub_dir, path.parents[0] / "frame")
+        print(f"Directory was zipped! Code: {zip_id}")
+        quit()
     subprocess.run(f"mv -vn *tif {str(path.parents[0])}", shell=True,
                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
-    quit()
     return
 
 
@@ -126,17 +127,39 @@ def stack_frames(source, video_id):
         image = cv.imread(image_source)
         stack = cv.max(stack, image)
     cv.imwrite(f"{video_id}.tif", stack)
-    return
+    print(f"Finished stack slices: {source}")
 
 
-def imagej_rvss(imagej, source, output_path, xml):
-    cmd = (f"{imagej} --ij2 --headless --console --run rvss.py "
-           f"'source=\"{source}/\", output=\"{output_path}/\", xml=\"{xml}/\"'")
-    print(cmd)
-    rvss = subprocess.run(cmd, shell=True,  stdout=subprocess.PIPE,
+def imagej_rvss(imagej, source, output_path, xml, attempt=0):
+    imj_cmd = (f"{imagej} --ij2 --headless --console --run rvss.py "
+               f"'source=\"{source}/\", output=\"{output_path}/\", xml=\"{xml}/\"'")
+    rvss = subprocess.run(imj_cmd, shell=True,  stdout=subprocess.PIPE,
                           stderr=subprocess.STDOUT, universal_newlines=True)
-    print(rvss.stdout, type(rvss.stdout))
-    return rvss.stdout
+    log = rvss.stdout
+    if 'No features model found' in log:
+        if attempt < 1:
+            begin = log.find('frame')+5
+            end = log.find('.png')
+            first = int(log[begin:end])-1
+            print(f"RVSS error: No features model found: frame{first+1}.png"
+                  f"\nRetaking with less frames. Range: 0..{first}")
+            count = subprocess.run("find . -maxdepth 1 -type f -name '*png' | wc -l", cwd=source,
+                                   shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+            last = int(count.stdout)
+            for index in range(first, last):
+                rm_cmd = f"rm -rf {str(source.resolve())}/frame{index}.png"
+                subprocess.run(rm_cmd, shell=True,  stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT, universal_newlines=True)
+            subprocess.run(f"rm -rf {str(output_path)}/", shell=True,
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+            output_path.mkdir()
+            return imagej_rvss(imagej, source, output_path, xml, attempt+1)
+        else:
+            print(f"RVSS attempt error: No features model found: frame{first}.png"
+                  "\nExiting...")
+            return False
+    print(f"Finished RVSS: {output_path}")
+    return True
 
 
 def video_frame(source, output_path):
@@ -150,30 +173,7 @@ def video_frame(source, output_path):
         cv.imwrite(f"{str(output_path)}/frame{count:03d}.png", image)
         success, image = vidcap.read()
         count += 1
-        # if count > 101:
-        #     break
-    print(f"Finished: {source}")
-
-
-def video_frameOLD(source):
-    # Convert a video to frame images
-    files = subprocess.run(f"find {source} -type f -name *mp4", shell=True,  stdout=subprocess.PIPE,
-                           stderr=subprocess.STDOUT, universal_newlines=True)
-    import pathlib
-    for video_source in files.stdout.splitlines():
-        path = pathlib.Path(video_source)
-        dir_structure(path, ["frame"])
-        sub_dir = path.parents[0] / "frame" / path.stem
-        vidcap = cv.VideoCapture(video_source)
-        success, image = vidcap.read()
-        count = 0
-        while success:
-            gray_frame = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
-            image = remove_text(gray_frame)
-            cv.imwrite(f"{str(sub_dir)}/frame{count:03d}.png", image)
-            success, image = vidcap.read()
-            count += 1
-        print(f"Finished: {video_source}")
+    print(f"Finished frames: {source}")
 
 
 def remove_text(image):
