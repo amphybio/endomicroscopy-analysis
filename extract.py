@@ -33,7 +33,8 @@
 # =============================================================================
 
 # USAGE
-# python extract.py -f video-frame -p midia/main/0000/
+# python extract.py -f mosaic -p midia/main/0000/
+# python extract.py -f stack -p midia/main/0000/frame/016-2017EM-PRE/rvss -i 100 200
 # python extract.py -f cryptometry -p midia/main/0000/016-2017EM-PRE-0-302TR.tif
 
 import cv2 as cv
@@ -112,18 +113,31 @@ def mosaic(source, imagej="/opt/Fiji.app/ImageJ-linux64"):
         if imagej_rvss(imagej, sub_dir, rvss_dir, rvsx_dir):
             stack_frames(rvss_dir, path.stem)
         zip_id = zip_move(sub_dir, path.parents[0] / "frame")
-        print(f"Directory was zipped! Code: {zip_id}")
-        quit()
+        print(f"Directory {source} was zipped! Code: {zip_id}")
     subprocess.run(f"mv -vn *tif {str(path.parents[0])}", shell=True,
                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
-    return
 
 
 def stack_frames(source, video_id):
-    files = subprocess.run(f"find {source} -type f -name '*tif'", shell=True,  stdout=subprocess.PIPE,
-                           stderr=subprocess.STDOUT, universal_newlines=True)
-    stack = cv.imread(files.stdout.splitlines()[0])
-    for image_source in files.stdout.splitlines()[1:]:
+    output = subprocess.run(f"find {source} -type f -name '*tif'", shell=True,  stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, universal_newlines=True)
+    files = output.stdout.splitlines()
+    files.sort()
+    stack = cv.imread(files[0])
+    for image_source in files[1:]:
+        image = cv.imread(image_source)
+        stack = cv.max(stack, image)
+    cv.imwrite(f"{video_id}.tif", stack)
+    print(f"Finished stack slices: {source}")
+
+
+def substack_frames(source, video_id, interval):
+    output = subprocess.run(f"find {source} -type f -name '*tif'", shell=True,  stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, universal_newlines=True)
+    files = output.stdout.splitlines()
+    files.sort()
+    stack = cv.imread(files[interval[0]])
+    for image_source in files[interval[0]:interval[1]]:
         image = cv.imread(image_source)
         stack = cv.max(stack, image)
     cv.imwrite(f"{video_id}.tif", stack)
@@ -155,8 +169,7 @@ def imagej_rvss(imagej, source, output_path, xml, attempt=0):
             output_path.mkdir()
             return imagej_rvss(imagej, source, output_path, xml, attempt+1)
         else:
-            print(f"RVSS attempt error: No features model found: frame{first}.png"
-                  "\nExiting...")
+            print("RVSS attempt error: No features model found. Exiting...")
             return False
     print(f"Finished RVSS: {output_path}")
     return True
@@ -591,12 +604,18 @@ def main():
                     help="Set a function to call (video_frame; video_frame_crop, cryptometry)")
     ap.add_argument("-p", "--path", type=str, required=False,
                     help="Input file or directory of images path")
+    ap.add_argument("-i", "--interval", nargs='+', type=int, required=False,
+                    help="Define range of frames to stack")
     args = vars(ap.parse_args())
     function = args["function"]
     source = args["path"]
-    if (function == "video-frame"):
-        # video_frame(source)
+    interval = args["interval"]
+
+    if (function == "mosaic"):
         mosaic(source)
+    elif (function == "stack"):
+        name = f'stack-{interval[0]}-{interval[1]}'
+        substack_frames(source, name, interval)
     elif (function == "cryptometry"):
         cryptometry(source)
     else:
