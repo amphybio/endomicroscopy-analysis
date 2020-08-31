@@ -40,6 +40,7 @@ import cv2 as cv
 import numpy as np
 import subprocess
 import sys
+import logging.config
 
 
 def dir_structure(path, dir_list):
@@ -97,6 +98,11 @@ def zip_move(path, dest_path):
 
 
 def mosaic(source, imagej="/opt/Fiji.app/ImageJ-linux64"):
+    logger.debug('This is debug')
+    logger.info('This is info')
+    logger.warning('This is a warning')
+    logger.error('This is an error')
+    quit()
     files = subprocess.run(f"find {source} -type f -name *mp4", shell=True,  stdout=subprocess.PIPE,
                            stderr=subprocess.STDOUT, universal_newlines=True)
     import pathlib
@@ -596,6 +602,18 @@ def draw_countours(image, crypts_list):
         cv.drawContours(image, crypt, -1, (115, 158, 0), 12)
 
 
+def setup_logging(default_path='logging.json', default_level=logging.INFO):
+    import pathlib
+    import json
+    path = pathlib.Path(default_path)
+    if path.exists():
+        with open(path, 'rt') as f:
+            config = json.load(f)
+        logging.config.dictConfig(config)
+    else:
+        logging.basicConfig(level=default_level)
+
+
 def main():
     import argparse
     ap = argparse.ArgumentParser()
@@ -605,10 +623,19 @@ def main():
                     help="Input file or directory of images path")
     ap.add_argument("-i", "--interval", nargs='+', type=int, required=False,
                     help="Define range of frames to stack")
+
+    ap.add_argument("-v", "--verbose", help="Increase output verbosity",
+                    action="store_true")
+
     args = vars(ap.parse_args())
     function = args["function"]
     source = args["path"]
     interval = args["interval"]
+    verbose = args["verbose"]
+
+    global logger
+    if verbose:
+        logger = logging.getLogger('debug')
 
     if (function == "mosaic"):
         mosaic(source)
@@ -624,6 +651,8 @@ def main():
 if __name__ == "__main__":
     import timeit
     repetitions = 1
+    setup_logging()
+    logger = logging.getLogger('default')
     print(
         f"Mean time elapsed {timeit.timeit(main, number=repetitions)/repetitions:.2f}s"
         f" in {repetitions} executions")
