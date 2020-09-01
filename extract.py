@@ -38,14 +38,16 @@
 
 import cv2 as cv
 import numpy as np
+import logendo as le
+from timeit import default_timer as timer
 import subprocess
 import sys
-import logging.config
 
 
 def dir_structure(path, dir_list):
     if not path.is_file():
-        print(f"The path {str(path)} is not a valid file name! Exiting...")
+        logger.error(
+            f'The path "{str(path)}" is not a valid file name! Exiting...')
         sys.exit()
     for dire in dir_list:
         path_dir = path.parents[0] / dire
@@ -54,30 +56,40 @@ def dir_structure(path, dir_list):
         sub_dir = path_dir / path.stem
         dir_exists(sub_dir)
         sub_dir.mkdir()
-        print(f"New directory structure was created! Source: {str(sub_dir)}")
+        logger.info(
+            f'New directory structure was created! Source: {str(sub_dir)}')
 
 
 def dir_exists(path):
     if path.is_dir():
-        option = input(
-            f" Path {str(path)} already exists! Want to send to sandbox? (y/n)"
-            " *Caution!* To press n will overwrite directory\n")
-        if option == "y":
-            if not ("main" in str(path)):
-                print("Directory 'main' not found! Exiting...")
-                sys.exit()
-            hierarchy = path.parts
-            main_index = hierarchy.index("main")
-            path_index = len(hierarchy)-(2 + max(0, main_index-1))
-            print("Directory was sent to sandbox! Code: "
-                  f"{zip_move(path, (path.parents[path_index] / 'sandbox' / hierarchy[main_index+1]))}")
-        elif option == "n":
-            subprocess.run(f"rm -rf {str(path.resolve())}", shell=True,
-                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
-            print(f"Directory {str(path)} was deleted!")
-        else:
-            print("Option unavailable! Exiting...")
-            sys.exit()
+        option = 'x'
+        while (option != 'y' and option != 'n'):
+            option = input(
+                f'Path {str(path)} already exists! Want to send to sandbox? (y/n)'
+                ' *Caution!* To press n will overwrite directory\n')
+            if option == 'y':
+                if not ('main' in str(path)):
+                    logger.error("Directory 'main' not found! Exiting...")
+                    sys.exit()
+                hierarchy = path.parts
+                main_index = hierarchy.index('main')
+                path_index = len(hierarchy)-(2 + max(0, main_index-1))
+                logger.info('Directory was sent to sandbox! Code: '
+                            f"{zip_move(path, (path.parents[path_index] / 'sandbox' / hierarchy[main_index+1]))}")
+            elif option == 'n':
+                subprocess.run(f'rm -rf {str(path.resolve())}', shell=True,
+                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+                logger.info(f'Directory {str(path)} was deleted!')
+            else:
+                logger.warning('Option unavailable!')
+
+
+def is_valid(source):
+    import pathlib
+    path = pathlib.Path(source)
+    if path.is_dir() or path.is_file():
+        return True
+    return False
 
 
 def zip_move(path, dest_path):
@@ -93,20 +105,21 @@ def zip_move(path, dest_path):
     mv = subprocess.run(f"mv -vn {key_sand}.zip {str(dest_path.resolve())}",
                         shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
     if (mv.stdout == ''):
-        print("Error to move: destination path already exists!")
+        logger.error("Destination path already exists!")
     return key_sand
 
 
-def mosaic(source, imagej="/opt/Fiji.app/ImageJ-linux64"):
-    logger.debug('This is debug')
-    logger.info('This is info')
-    logger.warning('This is a warning')
-    logger.error('This is an error')
-    quit()
-    files = subprocess.run(f"find {source} -type f -name *mp4", shell=True,  stdout=subprocess.PIPE,
-                           stderr=subprocess.STDOUT, universal_newlines=True)
+def mosaic(source, imagej='/opt/Fiji.app/ImageJ-linux64', extension='mp4'):
+    start_time = timer()
+    logger.info('Initializing mosaic')
+    output = subprocess.run(f"find {source} -type f -name *{extension}", shell=True,  stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, universal_newlines=True)
+    files = output.stdout.splitlines()
+    files.sort()
+    logger.debug(f'Source: {source} | ImageJ path: {imagej} | '
+                 f'No. Videos: {len(files)} | Videos: {files}')
     import pathlib
-    for video_source in files.stdout.splitlines():
+    for video_source in files:
         path = pathlib.Path(video_source)
         dir_structure(path, ["frame"])
         sub_dir = path.parents[0] / "frame" / path.stem
@@ -115,25 +128,35 @@ def mosaic(source, imagej="/opt/Fiji.app/ImageJ-linux64"):
         rvss_dir.mkdir()
         rvsx_dir = sub_dir / "rvss-xml"
         rvsx_dir.mkdir()
+        logger.info(f'Video: {video_source}')
         if imagej_rvss(imagej, sub_dir, rvss_dir, rvsx_dir):
             stack_frames(rvss_dir, path.stem)
-        zip_id = zip_move(sub_dir, path.parents[0] / "frame")
-        print(f"Directory {source} was zipped! Code: {zip_id}")
+        else:
+            logger.warning(
+                f'It is not possible to create stack image for video: {video_source}')
+        zip_id = zip_move(rvss_dir, sub_dir)
+        logger.info(f"Directory {rvss_dir} was zipped! Code: {zip_id}")
     subprocess.run(f"mv -vn *tif {str(path.parents[0])}", shell=True,
                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+    logger.info(f'Finished mosaic. Source: {source}')
+    end_time = timer()
+    logger.debug(f'Mosaic function time elapsed: {end_time-start_time:.2f}s')
 
 
 def stack_frames(source, video_id):
+    logger.info('Initializing stack frames')
     output = subprocess.run(f"find {source} -type f -name '*tif'", shell=True,  stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, universal_newlines=True)
     files = output.stdout.splitlines()
     files.sort()
+    logger.debug(f'Source: {source} | No. Frames: {len(files)} | '
+                 f'Frames: {files}')
     stack = cv.imread(files[0])
     for image_source in files[1:]:
         image = cv.imread(image_source)
         stack = cv.max(stack, image)
     cv.imwrite(f"{video_id}.tif", stack)
-    print(f"Finished stack slices: {source}")
+    logger.info(f"Finished stack frames {video_id}. Source: {source}")
 
 
 def substack_frames(source, video_id, interval):
@@ -145,26 +168,30 @@ def substack_frames(source, video_id, interval):
     for image_source in files[interval[0]:interval[1]]:
         image = cv.imread(image_source)
         stack = cv.max(stack, image)
-    cv.imwrite(f"{video_id}.tif", stack)
-    print(f"Finished stack slices: {source}")
+    cv.imwrite(f'{video_id}.tif', stack)
+    logger.info(f'Finished stack slices: {source}')
 
 
 def imagej_rvss(imagej, source, output_path, xml, attempt=0):
+    logger.info(f'Initializing ImageJ-RVSS wrapper. Attempt: {attempt}')
     imj_cmd = (f"{imagej} --ij2 --headless --console --run rvss.py "
                f"'source=\"{source}/\", output=\"{output_path}/\", xml=\"{xml}/\"'")
+    logger.debug(f'ImageJ bash command: {imj_cmd}')
     rvss = subprocess.run(imj_cmd, shell=True,  stdout=subprocess.PIPE,
                           stderr=subprocess.STDOUT, universal_newlines=True)
     log = rvss.stdout
+    logger.debug(f'Attempt: {attempt}. RVSS output: {log}')
     if 'No features model found' in log:
         if attempt < 1:
             begin = log.find('frame')+5
             end = log.find('.png')
             first = int(log[begin:end])-1
-            print(f"RVSS error: No features model found: frame{first+1}.png"
-                  f"\nRetaking with less frames. Range: 0..{first}")
+            logger.warning(f"RVSS output: No features model found: frame{first+1}.png"
+                           f"\nRetaking with less frames. Range: 0..{first}")
             count = subprocess.run("find . -maxdepth 1 -type f -name '*png' | wc -l", cwd=source,
                                    shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
             last = int(count.stdout)
+            logger.debug(f'Removing frames in the range {first}..{last-1}')
             for index in range(first, last):
                 rm_cmd = f"rm -rf {str(source.resolve())}/frame{index}.png"
                 subprocess.run(rm_cmd, shell=True,  stdout=subprocess.PIPE,
@@ -174,9 +201,10 @@ def imagej_rvss(imagej, source, output_path, xml, attempt=0):
             output_path.mkdir()
             return imagej_rvss(imagej, source, output_path, xml, attempt+1)
         else:
-            print("RVSS attempt error: No features model found. Exiting...")
+            logger.error(
+                f'RVSS attempt: No features model found. Source: {source}')
             return False
-    print(f"Finished RVSS: {output_path}")
+    logger.info(f"Finished RVSS: {output_path}")
     return True
 
 
@@ -191,7 +219,7 @@ def video_frame(source, output_path):
         cv.imwrite(f"{str(output_path)}/frame{count:03d}.png", image)
         success, image = vidcap.read()
         count += 1
-    print(f"Finished frames: {source}")
+    logger.info(f"Finished frames: {source}")
 
 
 def remove_text(image):
@@ -264,59 +292,33 @@ def ellipse_seg(image):
     image_resized = cv.copyMakeBorder(image, top=height, bottom=height, left=width,
                                       right=width, borderType=cv.BORDER_CONSTANT, value=[0, 0, 0])
 
-    print(f"Number of crypts assessed: {len(crypts_resized)}")
+    logger.info(f"Number of crypts assessed: {len(crypts_resized)}")
     return crypts_resized, image_resized
 
 
 def cryptometry(source):
+    logger.info("Initialize cryptometry")
     import pathlib
     path = pathlib.Path(source)
     dir_list = ["fig", "data"]
     dir_structure(path, dir_list)
-    print("Initialize cryptometry")
     image_source = cv.imread(source)
-    from timeit import default_timer as timer
-    print("Measures\t\t\t\t TIME(s)")
-    start = timer()
     crypts_list, image = ellipse_seg(image_source)
     draw_countours(image, crypts_list)
-    end = timer()
-    print(f"Segmentation and draw\t\t\t {end-start:.2f}")
-    start = timer()
     axis_ratio(image.copy(), crypts_list)
-    end = timer()
-    print(f"Axis ratio\t\t\t\t {end-start:.2f}")
-    start = timer()
     perimeter_shape(image.copy(), crypts_list)
-    end = timer()
-    print(f"Perimeter, Sphericity and Roundness \t {end-start:.2f}")
-    start = timer()
-    elongation_factor(image.copy(), crypts_list)
-    end = timer()
-    print(f"Elongation factor\t\t\t {end-start:.2f}")
-    start = timer()
+    elong_factor(image.copy(), crypts_list)
     # mean_feret = maximal_feret(image.copy(), crypts_list)
-    mean_feret = maximal_feret(image.copy(), crypts_list, 'H')
-    end = timer()
-    print(f"Max Feret\t\t\t\t {end-start:.2f}")
-    start = timer()
+    mean_feret = max_feret(image.copy(), crypts_list, 'H')
     neighbors_list = neighbors(crypts_list, mean_feret)
     # wall_thickness(image.copy(), crypts_list, neighbors_list)
     wall_thickness(image.copy(), crypts_list, neighbors_list, 'H')
-    end = timer()
-    print(f"Wall Thickness\t\t\t\t {end-start:.2f}")
-    start = timer()
-    intercrypt_distance(image.copy(), crypts_list, neighbors_list)
-    end = timer()
-    print(f"Mean and Minimal intercrypt distance\t {end-start:.2f}")
-    start = timer()
+    intercrypt_dist(image.copy(), crypts_list, neighbors_list)
     density(image_source.copy(), crypts_list)
-    end = timer()
-    print(f"Density\t\t\t\t\t {end-start:.2f} \nFinished cryptometry")
-
     for sub_dir in dir_list:
         subprocess.run(f"mv -vn *_{sub_dir}* {str(path.parents[0] / sub_dir / path.stem)}", shell=True, stdout=subprocess.PIPE,
                        stderr=subprocess.STDOUT, universal_newlines=True)
+    logger.info("Finished cryptometry")
 
 
 def density(image, crypts_list):
@@ -333,7 +335,7 @@ def density(image, crypts_list):
            ["density", "Density", "", "Ratio"])
 
 
-def elongation_factor(image, crypts_list):
+def elong_factor(image, crypts_list):
     elongation_list = []
     for crypt in crypts_list:
         major_axis, minor_axis = ellipse_axis(crypt)
@@ -359,7 +361,7 @@ def neighbors(crypts_list, mean_diameter):
     return neighbors_list
 
 
-def maximal_feret(image, crypts_list, algorithm='B'):
+def max_feret(image, crypts_list, algorithm='B'):
     feret_diameters = []
     if algorithm == 'B':
         # BRUTE-FORCE
@@ -400,7 +402,7 @@ def maximal_feret(image, crypts_list, algorithm='B'):
                 feret_diameters.append(y_distance)
     cv.imwrite("feret_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
     mean_feret = np.mean(feret_diameters)
-    feret_diameters = pixel_micrometer(feret_diameters)
+    feret_diameters = pixel_micro(feret_diameters)
     to_csv(feret_diameters, ["feret",
                              "Maximal feret diameter", "", "Diameter (\u03BCm)"])
     return mean_feret
@@ -456,7 +458,7 @@ def wall_thickness(image, crypts_list, neighbors_list, algorithm='B'):
         cv.line(image, tuple(wall_crypt_point[0]), tuple(
             wall_neighbor_point[0]), (115, 158, 0), 12)
     cv.imwrite("wall_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
-    wall_list = pixel_micrometer(wall_list)
+    wall_list = pixel_micro(wall_list)
     to_csv(wall_list, ["wall",
                        "Wall thickness", "", "Distance (\u03BCm)"])
 
@@ -476,7 +478,7 @@ def collinear(slope, first_point, collinear_point):
     return math.isclose(equation, collinear_point[1], abs_tol=(abs(slope))+1)
 
 
-def intercrypt_distance(image, crypts_list, neighbors_list):
+def intercrypt_dist(image, crypts_list, neighbors_list):
     MAX_DIST = image.shape[0]
     center_list = get_center(crypts_list)
     for center in center_list:
@@ -494,10 +496,10 @@ def intercrypt_distance(image, crypts_list, neighbors_list):
                 min_dist = neighbor[1]
         min_dist_list.append(min_dist)
     cv.imwrite("dist_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
-    intercrypt_list = pixel_micrometer(intercrypt_list)
+    intercrypt_list = pixel_micro(intercrypt_list)
     to_csv(intercrypt_list, ["dist",
                              "Mean intercrypt distance", "", "Distance (\u03BCm)"])
-    min_dist_list = pixel_micrometer(min_dist_list)
+    min_dist_list = pixel_micro(min_dist_list)
     to_csv(min_dist_list, ["min_dist",
                            "Minimal intercrypt distance", "", "Distance (\u03BCm)"])
 
@@ -522,13 +524,13 @@ def perimeter_shape(image, crypts_list):
     roundness_list = []
     for crypt in crypts_list:
         major_axis, minor_axis = ellipse_axis(crypt)
-        perimeter = ellipse_perimeter((major_axis / 2), (minor_axis / 2))
-        perimeter = pixel_micrometer(perimeter, is_list=False)
+        perimeter = ellipse_perim((major_axis / 2), (minor_axis / 2))
+        perimeter = pixel_micro(perimeter, is_list=False)
         perim_list.append(perimeter)
         area = ellipse_area(crypt)
-        area = pixel_micrometer(area, ((51**2), (20**2)), is_list=False)
+        area = pixel_micro(area, ((51**2), (20**2)), is_list=False)
         spher_list.append((4 * np.pi * area) / (perimeter ** 2)*100)
-        major_axis = pixel_micrometer(major_axis, is_list=False)
+        major_axis = pixel_micro(major_axis, is_list=False)
         roundness_list.append((4*(area/(np.pi * (major_axis ** 2))))*100)
     cv.imwrite("perim_fig.jpg", image, [cv.IMWRITE_JPEG_QUALITY, 75])
     to_csv(perim_list, ["perim", "Crypts Perimeter",
@@ -548,7 +550,7 @@ def ellipse_axis(crypt):
     return max(width, height), min(width, height)
 
 
-def ellipse_perimeter(a, b, n=10):
+def ellipse_perim(a, b, n=10):
     h = ((a-b)**2)/((a+b)**2)
     summation = 0
     import math
@@ -571,7 +573,7 @@ def axis_ratio(image, crypts_list):
     to_csv(axisr_list, ["axisr", "Axis Ratio", "", "Ratio"])
 
 
-def pixel_micrometer(value_pixel, ratio=(51, 20), is_list=True):
+def pixel_micro(value_pixel, ratio=(51, 20), is_list=True):
     # 51 pixels correspond to 20 micrometers by default
     PIXEL = ratio[0]
     MICROMETER = ratio[1]
@@ -602,30 +604,17 @@ def draw_countours(image, crypts_list):
         cv.drawContours(image, crypt, -1, (115, 158, 0), 12)
 
 
-def setup_logging(default_path='logging.json', default_level=logging.INFO):
-    import pathlib
-    import json
-    path = pathlib.Path(default_path)
-    if path.exists():
-        with open(path, 'rt') as f:
-            config = json.load(f)
-        logging.config.dictConfig(config)
-    else:
-        logging.basicConfig(level=default_level)
-
-
 def main():
     import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument("-f", "--function", type=str, required=True,
                     help="Set a function to call (video_frame; video_frame_crop, cryptometry)")
+    ap.add_argument("-v", "--verbose", help="Increase output verbosity",
+                    action="store_true")
     ap.add_argument("-p", "--path", type=str, required=False,
                     help="Input file or directory of images path")
     ap.add_argument("-i", "--interval", nargs='+', type=int, required=False,
-                    help="Define range of frames to stack")
-
-    ap.add_argument("-v", "--verbose", help="Increase output verbosity",
-                    action="store_true")
+                    help="Define range of frames in Stack function")
 
     args = vars(ap.parse_args())
     function = args["function"]
@@ -635,24 +624,29 @@ def main():
 
     global logger
     if verbose:
-        logger = logging.getLogger('debug')
+        logger = le.logging.getLogger('debug')
 
-    if (function == "mosaic"):
-        mosaic(source)
-    elif (function == "stack"):
-        name = f'stack-{interval[0]}-{interval[1]}'
-        substack_frames(source, name, interval)
-    elif (function == "cryptometry"):
-        cryptometry(source)
+    if is_valid(source):
+        if (function == "mosaic"):
+            mosaic(source)
+        elif (function == "stack"):
+            name = f'stack-{interval[0]}-{interval[1]}'
+            substack_frames(source, name, interval)
+        elif (function == "cryptometry"):
+            cryptometry(source)
+        else:
+            logger.error("Undefined function")
     else:
-        print("Undefined function")
+        logger.error(
+            f'The path "{source}" is not a valid source! Exiting...')
+        sys.exit()
 
 
 if __name__ == "__main__":
     import timeit
     repetitions = 1
-    setup_logging()
-    logger = logging.getLogger('default')
-    print(
+    le.setup_logging()
+    logger = le.logging.getLogger('default')
+    logger.info(
         f"Mean time elapsed {timeit.timeit(main, number=repetitions)/repetitions:.2f}s"
         f" in {repetitions} executions")
