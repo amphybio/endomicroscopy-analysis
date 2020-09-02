@@ -39,9 +39,9 @@
 import cv2 as cv
 import numpy as np
 import logendo as le
-from timeit import default_timer as timer
 import subprocess
 import sys
+from timeit import default_timer as timer
 
 
 def dir_structure(path, dir_list):
@@ -93,6 +93,8 @@ def is_valid(source):
 
 
 def zip_move(path, dest_path):
+    start_time = timer()
+    logger.info('Initializing zip-move')
     if not dest_path.is_dir():
         dest_path.mkdir()
     count = subprocess.run("find . -maxdepth 1 -type f | wc -l", cwd=dest_path,
@@ -106,6 +108,9 @@ def zip_move(path, dest_path):
                         shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
     if (mv.stdout == ''):
         logger.error("Destination path already exists!")
+    logger.info(f'Finished zip-move. Destiny path: {dest_path}')
+    end_time = timer()
+    logger.debug(f'Zip-Move function time elapsed: {end_time-start_time:.2f}s')
     return key_sand
 
 
@@ -120,6 +125,7 @@ def mosaic(source, imagej='/opt/Fiji.app/ImageJ-linux64', extension='mp4'):
                  f'No. Videos: {len(files)} | Videos: {files}')
     import pathlib
     for video_source in files:
+        logger.info(f'Video: {video_source}')
         path = pathlib.Path(video_source)
         dir_structure(path, ["frame"])
         sub_dir = path.parents[0] / "frame" / path.stem
@@ -128,7 +134,6 @@ def mosaic(source, imagej='/opt/Fiji.app/ImageJ-linux64', extension='mp4'):
         rvss_dir.mkdir()
         rvsx_dir = sub_dir / "rvss-xml"
         rvsx_dir.mkdir()
-        logger.info(f'Video: {video_source}')
         if imagej_rvss(imagej, sub_dir, rvss_dir, rvsx_dir):
             stack_frames(rvss_dir, path.stem)
         else:
@@ -144,6 +149,7 @@ def mosaic(source, imagej='/opt/Fiji.app/ImageJ-linux64', extension='mp4'):
 
 
 def stack_frames(source, video_id):
+    start_time = timer()
     logger.info('Initializing stack frames')
     output = subprocess.run(f"find {source} -type f -name '*tif'", shell=True,  stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, universal_newlines=True)
@@ -157,6 +163,9 @@ def stack_frames(source, video_id):
         stack = cv.max(stack, image)
     cv.imwrite(f"{video_id}.tif", stack)
     logger.info(f"Finished stack frames {video_id}. Source: {source}")
+    end_time = timer()
+    logger.debug(
+        f'Stack frames function time elapsed: {end_time-start_time:.2f}s')
 
 
 def substack_frames(source, video_id, interval):
@@ -173,6 +182,7 @@ def substack_frames(source, video_id, interval):
 
 
 def imagej_rvss(imagej, source, output_path, xml, attempt=0):
+    start_time = timer()
     logger.info(f'Initializing ImageJ-RVSS wrapper. Attempt: {attempt}')
     imj_cmd = (f"{imagej} --ij2 --headless --console --run rvss.py "
                f"'source=\"{source}/\", output=\"{output_path}/\", xml=\"{xml}/\"'")
@@ -185,9 +195,9 @@ def imagej_rvss(imagej, source, output_path, xml, attempt=0):
         if attempt < 1:
             begin = log.find('frame')+5
             end = log.find('.png')
-            first = int(log[begin:end])-1
-            logger.warning(f"RVSS output: No features model found: frame{first+1}.png"
-                           f"\nRetaking with less frames. Range: 0..{first}")
+            first = int(log[begin:end])
+            logger.warning(f"RVSS output: No features model found: frame{first}.png"
+                           f"\nRetaking with less frames. Range: 0..{first-1}")
             count = subprocess.run("find . -maxdepth 1 -type f -name '*png' | wc -l", cwd=source,
                                    shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
             last = int(count.stdout)
@@ -204,12 +214,17 @@ def imagej_rvss(imagej, source, output_path, xml, attempt=0):
             logger.error(
                 f'RVSS attempt: No features model found. Source: {source}')
             return False
-    logger.info(f"Finished RVSS: {output_path}")
+    logger.info(f"Finished ImageJ-RVSS wrapper. Ouput path: {output_path}")
+    end_time = timer()
+    logger.debug(
+        f'ImageJ-RVSS wrapper function time elapsed: {end_time-start_time:.2f}s')
     return True
 
 
 def video_frame(source, output_path):
     # Convert a video to frame images
+    start_time = timer()
+    logger.info('Initializing video to frames')
     vidcap = cv.VideoCapture(source)
     success, image = vidcap.read()
     count = 0
@@ -219,7 +234,10 @@ def video_frame(source, output_path):
         cv.imwrite(f"{str(output_path)}/frame{count:03d}.png", image)
         success, image = vidcap.read()
         count += 1
-    logger.info(f"Finished frames: {source}")
+    logger.info(f"Finished video to frames. No. frames: {count}")
+    end_time = timer()
+    logger.debug(
+        f'Video to frames function elapsed time {end_time-start_time:.2f}')
 
 
 def remove_text(image):
@@ -627,6 +645,7 @@ def main():
         logger = le.logging.getLogger('debug')
 
     if is_valid(source):
+        logger.info('\n\nFRAMEWORK FOR ENDOMICROSCOPY ANALYSIS\n')
         if (function == "mosaic"):
             mosaic(source)
         elif (function == "stack"):
@@ -639,14 +658,9 @@ def main():
     else:
         logger.error(
             f'The path "{source}" is not a valid source! Exiting...')
-        sys.exit()
 
 
 if __name__ == "__main__":
-    import timeit
-    repetitions = 1
     le.setup_logging()
     logger = le.logging.getLogger('default')
-    logger.info(
-        f"Mean time elapsed {timeit.timeit(main, number=repetitions)/repetitions:.2f}s"
-        f" in {repetitions} executions")
+    main()
