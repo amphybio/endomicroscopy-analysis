@@ -41,6 +41,8 @@ import csv
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+import logendo as le
+from timeit import default_timer as timer
 
 
 def plot_style():
@@ -52,6 +54,8 @@ def plot_style():
 
 
 def join_csv(source, measure):
+    start_time = timer()
+    logger.debug('Initializing join csv data')
     import subprocess
     csv_files = subprocess.run(f"ls -1v {source}*/{measure}_data.csv", shell=True,  stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT, universal_newlines=True)
@@ -64,21 +68,31 @@ def join_csv(source, measure):
         data.append(values)
 
     to_csv(data, f'{measure}_combined_data')
+    logger.debug('Finished join csv')
+    end_time = timer()
+    logger.debug(
+        f'Join csv function time elapsed: {end_time-start_time:.2f}s')
 
 
 def rm_outliers(data):
+    logger.debug('Initializing remove outliers')
     clean = []
-    for line in data:
+    for index, line in enumerate(data):
+        logger.debug(f'Data {index} length: {len(line)}')
         ordered = np.sort(line)
         Q1 = np.quantile(ordered, 0.25)
         Q3 = np.quantile(ordered, 0.75)
         IQR = Q3 - Q1
         clean.append(ordered[(ordered >= Q1 - 1.5*IQR) &
                              (ordered <= Q3 + 1.5*IQR)])
+        logger.debug(f'Data {index} final length: {len(clean[index])}')
+    logger.debug('Finished remove outliers')
     return clean
 
 
 def dist_plot(data, ticks_number=[5, 7], decimals=[2, 3], outliers=False):
+    start_time = timer()
+    logger.info('Initializing distance histogram')
     data_float = [np.asarray(list(filter(None, arr[1:])), dtype=np.float)
                   for arr in data[1:]]
     if not outliers:
@@ -87,28 +101,32 @@ def dist_plot(data, ticks_number=[5, 7], decimals=[2, 3], outliers=False):
     _, ax = plt.subplots(1)
     x_ticks = ticks_interval(
         data_float, ticks_number[0], decimals[0])
-    # x_ticks[-1] = 100
-    densities = [0]
-    for index, img_data in enumerate(data_float[: 2]):
-        densities.append(ax.hist(img_data, density=True, bins=x_ticks,
-                                 alpha=.85, label=data[index+1][0])[0])
-    densities = densities[1:]
-    interval = x_ticks[1]-x_ticks[0]
-    freq_p = densities[0] * interval
-    freq_q = densities[1] * interval
 
-    np.set_printoptions(precision=5)
-    entropy_p, max_entropy_p = shannon_entropy(densities[0], x_ticks)
-    entropy_q, max_entropy_q = shannon_entropy(densities[1], x_ticks)
-    print(
-        f"\nS(p): {entropy_p:.3f} ({entropy_p/max_entropy_p:.3f})"
-        f"\nS(q): {entropy_q:.3f} ({entropy_q/max_entropy_q:.3f})"
-        f"\nMax(S): {max_entropy_p:.3f} {max_entropy_q:.3f}"
-        f"\nHellinger Distance(p,q):{hellinger_distance( freq_p, freq_q):.3f}"
-        # f"\nHellinger Distance(p,q):{hellinger_distance( densities[0],densities[1]):.3f}"
-        "\n")
+    interval = x_ticks[1]-x_ticks[0]
+    logger.debug(
+        f'X-ticks range: {x_ticks[-1]-x_ticks[0]:.5f} |  No. of bins: {len(x_ticks)-1} | '
+        f'Bin range: {interval:.5f}')
+    frequencies_list = [0]
+    densities_list = [0]
+    for index, img_data in enumerate(data_float[: 2]):
+        densities_list.append(ax.hist(img_data, density=True, bins=x_ticks,
+                                      alpha=.85, label=data[index+1][0])[0])
+        densities = densities_list[index+1]
+        frequencies_list.append(densities * interval)
+        entropy, max_entropy = shannon_entropy(densities, x_ticks)
+        logger.info(f'Data {index} - Densities: '
+                    + str([f'{value:.5f}' for value in densities])
+                    + ' | Frequencies: '
+                    + str([f'{value:.5f}' for value in frequencies_list[index+1]])
+                    + f' | Entropy {entropy:.3f}, Max {max_entropy:.3f} '
+                    f'({entropy/max_entropy:.3f})')
+    frequencies_list = frequencies_list[1:]
+    logger.info('Hellinger distance: '
+                f'{hellinger_distance(frequencies_list[0], frequencies_list[1]):.3f}')
+    densities_list = densities_list[1:]
+
     ax.set(title=data[0][1], ylabel="Density", xlabel=data[0][3], xticks=x_ticks,
-           yticks=ticks_interval(densities, ticks_number[1], decimals[1]))
+           yticks=ticks_interval(densities_list, ticks_number[1], decimals[1]))
     # Optional line | IF decimals 0 >> astype(np.int)
     # ax.set_xticklabels(ax.get_xticks().astype(int), size=17)
     plt.legend(loc='upper right', prop={'size': 12})
@@ -122,6 +140,10 @@ def dist_plot(data, ticks_number=[5, 7], decimals=[2, 3], outliers=False):
     plt.savefig(f"{data[0][0]}_dist_plot.tif",
                 dpi=600, bbox_inches="tight")
     plt.clf()
+    logger.info('Finished distance histogram')
+    end_time = timer()
+    logger.debug(
+        f'Distance histogram function time elapsed: {end_time-start_time:.2f}s')
 
 
 def shannon_entropy(densities, ticks):
@@ -133,8 +155,7 @@ def shannon_entropy(densities, ticks):
         entropy += freq * np.log2(freq/interval) if freq != 0 else 0
     entropy *= -1
 
-    uniform = 1/(ticks[-1]-ticks[0])
-    max_entropy = -1*np.log2(uniform)
+    max_entropy = np.log2(ticks[-1]-ticks[0])
 
     return entropy, max_entropy
 
@@ -182,6 +203,8 @@ def jensen_shannon_distance(p, q, a=0.5):
 
 
 def hist_plot(data, ticks_number=[6, 6], decimals=[0, 3]):
+    start_time = timer()
+    logger.info('Initializing histogram')
     data_float = [np.asarray(list(filter(None, arr)), dtype=np.float)
                   for arr in data[1:]]
     plot_style()
@@ -202,9 +225,15 @@ def hist_plot(data, ticks_number=[6, 6], decimals=[0, 3]):
     plt.savefig(f"{data[0][0]}_hist_plot.tif",
                 dpi=600, bbox_inches="tight")
     plt.clf()
+    logger.info('Finished histogram')
+    end_time = timer()
+    logger.debug(
+        f'Histogram function time elapsed: {end_time-start_time:.2f}s')
 
 
 def box_plot(data, ticks_number=7, decimals=2):
+    start_time = timer()
+    logger.info('Initializing box-plot')
     if len(data) > 2:
         x_labels = list(np.asarray(data)[1:, 0])
         data_float = [np.asarray(list(filter(None, arr[1:])), dtype=np.float)
@@ -227,14 +256,25 @@ def box_plot(data, ticks_number=7, decimals=2):
     plot.savefig(f"{data[0][0]}_box_plot.tif",
                  dpi=600, bbox_inches="tight")
     plt.clf()
+    logger.info('Finished box-plot')
+    end_time = timer()
+    logger.debug(f'Box-plot function time elapsed: {end_time-start_time:.2f}s')
 
 
 def ticks_interval(data, quantity, decimals):
+    start_time = timer()
+    logger.debug('Initializing ticks interval')
     max_value = max(map(max, data))
     min_value = min(map(min, data))
     interval = np.round((max_value - min_value) / quantity, decimals)
+    logger.debug(f'Min value: {min_value:.5f} | Max value: {max_value:.5f} | '
+                 f'No. ticks: {quantity} | Decimal places: {decimals} | '
+                 f'Interval: {interval:.5f}')
+
     ticks = np.round(np.arange(min_value, max_value +
                                interval, interval), decimals)
+    logger.debug('Pre-ticks: ' + str([f'{value:.5f}' for value in ticks]))
+
     if max(ticks) < max_value:
         ticks = np.append(ticks, ticks[-1]+interval)
     if min(ticks) > min_value:
@@ -244,10 +284,17 @@ def ticks_interval(data, quantity, decimals):
         else:
             ticks = np.round(np.arange(0, max_value +
                                        interval, interval), decimals)
+    logger.debug('Ticks: ' + str([f'{value:.5f}' for value in ticks]))
+    logger.debug('Finished ticks interval')
+    end_time = timer()
+    logger.debug(
+        f'Ticks interval function time elapsed: {end_time-start_time:.2f}s')
     return ticks
 
 
 def summary_stats(source, outliers=False):
+    start_time = timer()
+    logger.debug('Initializing summary data')
     import subprocess
     csv_files = subprocess.run(f"ls -1v {source}*csv", shell=True,  stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT, universal_newlines=True)
@@ -261,6 +308,10 @@ def summary_stats(source, outliers=False):
         data_export.append(
             [data[0][1], np.mean(data_float), np.std(data_float)])
     to_csv(data_export, "summary")
+    logger.debug('Finished summary')
+    end_time = timer()
+    logger.debug(
+        f'Summary function time elapsed: {end_time-start_time:.2f}s')
 
 
 def read_csv(data_source):
@@ -280,11 +331,21 @@ def to_csv(data, name='data'):
             writer.writerow(row)
 
 
+def is_valid(source):
+    import pathlib
+    path = pathlib.Path(source)
+    if path.is_dir() or path.is_file():
+        return True
+    return False
+
+
 def main():
     import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument("-f", "--function", type=str, required=True,
                     help="Set a function to call (box_plot, freq_plot)")
+    ap.add_argument("-v", "--verbose", help="Increase output verbosity",
+                    action="store_true")
     ap.add_argument("-p", "--path", type=str, required=False,
                     help="Input file or directory of images path")
     ap.add_argument("-d", "--decimals", nargs='+', type=int, required=False,
@@ -296,33 +357,49 @@ def main():
     function = args["function"]
     source = args["path"]
     decimals = args["decimals"]
+    verbose = args["verbose"]
 
-    if (function == "box-plot"):
-        data = read_csv(source)
-        if decimals is None:
-            box_plot(data)
+    global logger
+    if verbose:
+        logger = le.logging.getLogger('debug')
+
+    if is_valid(source):
+        logger.info(
+            '\n\nFRAMEWORK FOR ENDOMICROSCOPY ANALYSIS - PLOT MODULE\n')
+        if (function == "box-plot"):
+            data = read_csv(source)
+            if decimals is None:
+                box_plot(data)
+            else:
+                box_plot(data, ticks_number=decimals[0], decimals=decimals[1])
+        elif (function == "hist-plot"):
+            data = read_csv(source)
+            if decimals is None:
+                hist_plot(data)
+            else:
+                hist_plot(
+                    data, ticks_number=decimals[:2], decimals=decimals[2:])
+        elif (function == "dist-plot"):
+            data = read_csv(source)
+            if decimals is None:
+                dist_plot(data)
+            else:
+                dist_plot(
+                    data, ticks_number=decimals[:2], decimals=decimals[2:])
+        elif (function == "join-csv"):
+            measure = args["measure"]
+            join_csv(source, measure)
+        elif (function == "summary"):
+            summary_stats(source)
         else:
-            box_plot(data, ticks_number=decimals[0], decimals=decimals[1])
-    elif (function == "hist-plot"):
-        data = read_csv(source)
-        if decimals is None:
-            hist_plot(data)
-        else:
-            hist_plot(data, ticks_number=decimals[:2], decimals=decimals[2:])
-    elif (function == "dist-plot"):
-        data = read_csv(source)
-        if decimals is None:
-            dist_plot(data)
-        else:
-            dist_plot(data, ticks_number=decimals[:2], decimals=decimals[2:])
-    elif (function == "join-csv"):
-        measure = args["measure"]
-        join_csv(source, measure)
-    elif (function == "summary"):
-        summary_stats(source)
+            print("Undefined function")
+            logger.error("Undefined function")
     else:
-        print("Undefined function")
+        logger.error(
+            f'The path "{source}" is not a valid source! Exiting...')
 
 
 if __name__ == "__main__":
+    le.setup_logging()
+    logger = le.logging.getLogger('default')
     main()

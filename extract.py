@@ -117,7 +117,7 @@ def zip_move(path, dest_path):
 def mosaic(source, imagej='/opt/Fiji.app/ImageJ-linux64', extension='mp4'):
     start_time = timer()
     logger.info('Initializing mosaic')
-    output = subprocess.run(f'find {source} -type f -name *{extension}', shell=True,  stdout=subprocess.PIPE,
+    output = subprocess.run(f'find {source} -type f -name "*{extension}"', shell=True,  stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, universal_newlines=True)
     files = output.stdout.splitlines()
     files.sort()
@@ -349,7 +349,7 @@ def ellipse_seg(image, iterat=9):
 def cryptometry(source, extension='tif'):
     start_time = timer()
     logger.info('Initializing cryptometry')
-    output = subprocess.run(f'find {source} -type f -name *{extension}', shell=True,  stdout=subprocess.PIPE,
+    output = subprocess.run(f'find {source} -type f -name "*{extension}"', shell=True,  stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, universal_newlines=True)
     files = output.stdout.splitlines()
     files.sort()
@@ -771,7 +771,8 @@ def main():
         logger = le.logging.getLogger('debug')
 
     if is_valid(source):
-        logger.info('\n\nFRAMEWORK FOR ENDOMICROSCOPY ANALYSIS\n')
+        logger.info(
+            '\n\nFRAMEWORK FOR ENDOMICROSCOPY ANALYSIS - FEATURES MODULE\n')
         if (function == "mosaic"):
             mosaic(source)
         elif (function == "stack"):
