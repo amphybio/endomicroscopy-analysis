@@ -49,4 +49,4 @@ p.interpolate = True
 
 Register_Virtual_Stack_MT.exec(source, output, xml,
                                reference_name, p, use_shrinking_constraint)
-print('RVSS finished: {0} \n'.format(output))
+print('RVSS finished: {0}'.format(output))
