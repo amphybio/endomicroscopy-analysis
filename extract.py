@@ -146,7 +146,7 @@ def mosaic(source, imagej='/opt/Fiji.app/ImageJ-linux64', extension='mp4'):
             subprocess.run(f'rm -rf {str(rvss_dir.resolve())}',
                            shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
         end_video = timer()
-        logger.debug(f'Video {index} time elapsed: {start_video-end_video}s')
+        logger.debug(f'Video {index} time elapsed: {end_video-start_video}s')
         subprocess.run(f'mv -vn *tif {str(path.parents[0])}', shell=True,
                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
     logger.info(f'Finished mosaic. Source: {source}')
@@ -208,17 +208,17 @@ def imagej_rvss(imagej, source, output_path, xml, attempt=0):
             begin = log.find('frame')+5
             end = log.find('.png')
             first = int(log[begin:end])
-            logger.warning(f"RVSS output: No features model found: frame{first}.png"
-                           f"\nRetaking with less frames. Range: 0..{first-1}")
-            count = subprocess.run("find . -maxdepth 1 -type f -name '*png' | wc -l", cwd=source,
+            logger.warning(f'RVSS output: No features model found: frame{first}.png. '
+                           f'Retaking with less frames. Range: 0..{first-1}')
+            count = subprocess.run('find . -maxdepth 1 -type f -name "*png" | wc -l', cwd=source,
                                    shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
             last = int(count.stdout)
             logger.debug(f'Removing frames in the range {first}..{last-1}')
             for index in range(first, last):
-                rm_cmd = f"rm -rf {str(source.resolve())}/frame{index}.png"
+                rm_cmd = f'rm -rf {str(source.resolve())}/frame{index}.png'
                 subprocess.run(rm_cmd, shell=True,  stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT, universal_newlines=True)
-            subprocess.run(f"rm -rf {str(output_path)}/", shell=True,
+            subprocess.run(f'rm -rf {str(output_path)}/', shell=True,
                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
             output_path.mkdir()
             return imagej_rvss(imagej, source, output_path, xml, attempt+1)
@@ -301,8 +301,8 @@ def ellipse_seg(image, iterat=9):
     morph_trans_e = cv.erode(thresh, kernel, iterations=iterat)
     contours_list, hierarchy = cv.findContours(
         morph_trans_e, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
-    logger.debug(f'No. of elements after erosion: {len(contours_list)} | '
-                 f'No. iterations: {iterat}')
+    logger.debug(f'No. iterations: {iterat} | '
+                 f'No. of elements after erosion: {len(contours_list)}')
 
     crypts = []
     MIN_AREA = 6200
@@ -440,19 +440,23 @@ def neighbors(crypts_list, mean_diameter):
     logger.debug(f'Maximal distance to be a neighbor: {MAX_DIST:.2f} pixels')
     neighbors_list = [[] for crypt in range(len(crypts_list))]
     center_list = get_center(crypts_list)
+    count_neighbors = []
     for crypt_index, first_center in enumerate(center_list):
         for neighbor_index, second_center in enumerate(center_list):
             dist = distance(first_center, second_center)
             if dist < MAX_DIST and dist != 0:
                 neighbors_list[crypt_index].append((
                     neighbor_index, dist))
-        logger.debug(f'Crypt {crypt_index:03d} - No. of neighbors: '
-                     f'{len(neighbors_list[crypt_index])} | Neighbors(index, dist): '
+        count_neighbors.append(len(neighbors_list[crypt_index]))
+        logger.debug(f'Crypt {crypt_index:03d} - Neighbors(index, dist): '
                      + str([f'({index}, {value:.2f})' for index, value in neighbors_list[crypt_index]]))
     logger.info('Finished neighbors definition')
     end_time = timer()
+    counts = np.bincount(count_neighbors)
+    logger.debug(f'Neighbors count: {count_neighbors} | Counts: {counts}')
     logger.debug(
-        f'Neighbors function time elapsed: {end_time-start_time:.2f}s')
+        f'Neighbors function time elapsed: {end_time-start_time:.2f}s | '
+        f'Neighbors mode: {np.argmax(counts)} and mean: {np.mean(count_neighbors):.1f}')
     return neighbors_list
 
 
@@ -507,7 +511,7 @@ def max_feret(image, crypts_list, algorithm='E'):
     logger.info('Finished maximal feret diameter')
     end_time = timer()
     logger.debug(f'Maximal feret diameter function time elapsed: {end_time-start_time:.2f}s | '
-                 f'Maximal feret(\u03BCm) mean: {mean_feret:.2f} and std: {np.std(feret_diameters):.2f} | '
+                 f'Maximal feret(\u03BCm) mean: {np.mean(feret_diameters):.2f} and std: {np.std(feret_diameters):.2f} | '
                  'Maximal feret diameter(\u03BCm) list: ' + str([f'{value:.2f}' for value in feret_diameters]))
     return mean_feret
 
