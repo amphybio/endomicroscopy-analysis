@@ -208,17 +208,17 @@ def imagej_rvss(imagej, source, output_path, xml, attempt=0):
             begin = log.find('frame')+5
             end = log.find('.png')
             first = int(log[begin:end])
-            logger.warning(f"RVSS output: No features model found: frame{first}.png"
-                           f"\nRetaking with less frames. Range: 0..{first-1}")
-            count = subprocess.run("find . -maxdepth 1 -type f -name '*png' | wc -l", cwd=source,
+            logger.warning(f'RVSS output: No features model found: frame{first}.png. '
+                           f'Retaking with less frames. Range: 0..{first-1}')
+            count = subprocess.run('find . -maxdepth 1 -type f -name "*png" | wc -l', cwd=source,
                                    shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
             last = int(count.stdout)
             logger.debug(f'Removing frames in the range {first}..{last-1}')
             for index in range(first, last):
-                rm_cmd = f"rm -rf {str(source.resolve())}/frame{index}.png"
+                rm_cmd = f'rm -rf {str(source.resolve())}/frame{index}.png'
                 subprocess.run(rm_cmd, shell=True,  stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT, universal_newlines=True)
-            subprocess.run(f"rm -rf {str(output_path)}/", shell=True,
+            subprocess.run(f'rm -rf {str(output_path)}/', shell=True,
                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
             output_path.mkdir()
             return imagej_rvss(imagej, source, output_path, xml, attempt+1)
