@@ -393,16 +393,20 @@ def density(image, crypts_list):
     crypts_area = 0
     for crypt in crypts_list:
         crypts_area += ellipse_area(crypt)
-    logger.debug('Crypts area: '
-                 f'{pixel_micro(crypts_area, ((51**2), (20**2)), is_list=False):.2f}\u03BCm^2')
+
+    crypts_area = pixel_micro(crypts_area, ((51**2), (20**2)), is_list=False)
+    logger.debug(f'Crypts area: {crypts_area:.2f}\u03BCm^2')
 
     _, thresh = cv.threshold(image, 1, 255, cv.THRESH_BINARY)
     thresh = cv.cvtColor(thresh, cv.COLOR_BGR2GRAY)
     background_area = np.sum(thresh == 255)
-    logger.debug('Background area: '
-                 f'{pixel_micro(background_area, ((51**2), (20**2)), is_list=False):.2f}\u03BCm^2')
+    background_area = pixel_micro(
+        background_area, ((51**2), (20**2)), is_list=False)
 
-    density = [crypts_area/background_area]
+    muscosa_area = background_area - crypts_area
+    logger.debug(f'Mucosa area: {muscosa_area:.2f}\u03BCm^2')
+
+    density = [crypts_area/muscosa_area]
     to_csv(density,
            ['density', 'Density', '', 'Ratio'])
     logger.info('Finished density')
@@ -436,7 +440,8 @@ def elong_factor(image, crypts_list):
 def neighbors(crypts_list, mean_diameter):
     start_time = timer()
     logger.info('Initializing neighbors definition')
-    MAX_DIST = 2.3 * mean_diameter
+    # MAX_DIST = 2.3 * mean_diameter
+    MAX_DIST = 700
     logger.debug(f'Maximal distance to be a neighbor: {MAX_DIST:.2f} pixels')
     neighbors_list = [[] for crypt in range(len(crypts_list))]
     center_list = get_center(crypts_list)
@@ -728,7 +733,7 @@ def pixel_micro(value_pixel, ratio=(51, 20), is_list=True):
     if is_list:
         value_micrometer = []
         for value in value_pixel:
-            value_micrometer.append((MICROMETER * int(value)) / PIXEL)
+            value_micrometer.append((MICROMETER * value) / PIXEL)
         return value_micrometer
     else:
         return (MICROMETER * value_pixel) / PIXEL
