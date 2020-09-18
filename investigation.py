@@ -60,7 +60,9 @@ def join_csv(source, measure):
     csv_files = subprocess.run(f"ls -1v {source}*/{measure}_data.csv", shell=True,  stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT, universal_newlines=True)
     all_files = csv_files.stdout.splitlines()
-
+    all_files.sort()
+    logger.info(f'No. of csv files found: {len(all_files)}')
+    logger.debug(f'Measure: {measure} | Files: {all_files}')
     data = [read_csv(all_files[0])[0]]
     for csv_file in all_files:
         values = read_csv(csv_file)[1]
@@ -366,6 +368,7 @@ def main():
     if is_valid(source):
         logger.info(
             '\n\nFRAMEWORK FOR ENDOMICROSCOPY ANALYSIS - PLOT MODULE\n')
+        logger.info(f'Source: {source}')
         if (function == "box-plot"):
             data = read_csv(source)
             if decimals is None:
