@@ -92,7 +92,7 @@ def rm_outliers(data):
     return clean
 
 
-def dist_plot(data, ticks_number=[5, 7], decimals=[2, 3], outliers=False):
+def dist_plot(data, ticks_number=[5, 7], decimals=[2, 3], outliers=True):
     start_time = timer()
     logger.info('Initializing distance histogram')
     data_float = [np.asarray(list(filter(None, arr[1:])), dtype=np.float)
@@ -139,7 +139,7 @@ def dist_plot(data, ticks_number=[5, 7], decimals=[2, 3], outliers=False):
             label.set_visible(True)
         else:
             label.set_visible(False)
-    plt.savefig(f"{data[0][0]}_dist_plot.tif",
+    plt.savefig(f"{data[0][0]}_plot.tif",
                 dpi=600, bbox_inches="tight")
     plt.clf()
     logger.info('Finished distance histogram')
