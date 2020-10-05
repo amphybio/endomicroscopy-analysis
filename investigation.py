@@ -107,7 +107,7 @@ def dist_plot(data, ticks_number=[5, 7], decimals=[2, 3], outliers=True):
     interval = x_ticks[1]-x_ticks[0]
     logger.debug(
         f'X-ticks range: {x_ticks[-1]-x_ticks[0]:.5f} |  No. of bins: {len(x_ticks)-1} | '
-        f'Bin range: {interval:.5f}')
+        f'Bin width: {interval:.5f}')
     frequencies_list = [0]
     densities_list = [0]
     for index, img_data in enumerate(data_float[: 2]):
@@ -115,13 +115,14 @@ def dist_plot(data, ticks_number=[5, 7], decimals=[2, 3], outliers=True):
                                       alpha=.85, label=data[index+1][0])[0])
         densities = densities_list[index+1]
         frequencies_list.append(densities * interval)
-        entropy, max_entropy = shannon_entropy(densities, x_ticks)
+        entropy, max_entropy, degree_disorder = shannon_entropy(
+            densities, x_ticks)
         logger.info(f'Data {index} - Densities: '
                     + str([f'{value:.5f}' for value in densities])
                     + ' | Frequencies: '
                     + str([f'{value:.5f}' for value in frequencies_list[index+1]])
-                    + f' | Entropy {entropy:.3f}, Max {max_entropy:.3f} '
-                    f'({entropy/max_entropy:.3f})')
+                    + f' | Entropy {entropy:.3f}, Max {max_entropy:.3f} | '
+                    + f'Degree of disorder: {degree_disorder:.3f}')
     frequencies_list = frequencies_list[1:]
     logger.info('Hellinger distance: '
                 f'{hellinger_distance(frequencies_list[0], frequencies_list[1]):.3f}')
@@ -149,17 +150,20 @@ def dist_plot(data, ticks_number=[5, 7], decimals=[2, 3], outliers=True):
 
 
 def shannon_entropy(densities, ticks):
-    interval = ticks[1]-ticks[0]
-    relative_frequency = densities * interval
+    bin_width = ticks[1]-ticks[0]
+    relative_frequency = densities * bin_width
 
     entropy = 0
     for freq in relative_frequency:
-        entropy += freq * np.log2(freq/interval) if freq != 0 else 0
+        entropy += freq * np.log2(freq/bin_width) if freq != 0 else 0
     entropy *= -1
 
-    max_entropy = np.log2(ticks[-1]-ticks[0])
+    interval_width = ticks[-1]-ticks[0]
+    max_entropy = np.log2(interval_width)
 
-    return entropy, max_entropy
+    degree_disorder = (2 ** entropy) / interval_width
+
+    return entropy, max_entropy, degree_disorder
 
 
 def jeffreys_distance(p, q):

@@ -403,10 +403,9 @@ def density(image, crypts_list):
     background_area = pixel_micro(
         background_area, ((51**2), (20**2)), is_list=False)
 
-    muscosa_area = background_area - crypts_area
-    logger.debug(f'Mucosa area: {muscosa_area:.2f}\u03BCm^2')
+    logger.debug(f'Background area: {background_area:.2f}\u03BCm^2')
 
-    density = [crypts_area/muscosa_area]
+    density = [crypts_area/background_area]
     to_csv(density,
            ['density', 'Density', '', 'Ratio'])
     logger.info('Finished density')
@@ -499,14 +498,14 @@ def max_feret(image, crypts_list, algorithm='E'):
             y_distance = distance(top, bottom)
             x_distance = distance(left, right)
             if x_distance > y_distance:
-                cv.circle(image, left, 7, (255, 0, 0), -1)
-                cv.circle(image, right, 7, (255, 0, 0), -1)
-                cv.line(image, left, right, (255, 0, 0), thickness=12)
+                cv.circle(image, left, 7, (115, 158, 0), -1)
+                cv.circle(image, right, 7, (115, 158, 0), -1)
+                cv.line(image, left, right, (115, 158, 0), thickness=12)
                 feret_diameters.append(x_distance)
             else:
-                cv.circle(image, top, 7, (255, 0, 0), -1)
-                cv.circle(image, bottom, 7, (255, 0, 0), -1)
-                cv.line(image, top, bottom, (255, 0, 0), thickness=12)
+                cv.circle(image, top, 7, (115, 158, 0), -1)
+                cv.circle(image, bottom, 7, (115, 158, 0), -1)
+                cv.line(image, top, bottom, (115, 158, 0), thickness=12)
                 feret_diameters.append(y_distance)
     cv.imwrite('feret_fig.jpg', image, [cv.IMWRITE_JPEG_QUALITY, 75])
     mean_feret = np.mean(feret_diameters)
