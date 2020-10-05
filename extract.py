@@ -393,14 +393,17 @@ def density(image, crypts_list):
     crypts_area = 0
     for crypt in crypts_list:
         crypts_area += ellipse_area(crypt)
-    logger.debug('Crypts area: '
-                 f'{pixel_micro(crypts_area, ((51**2), (20**2)), is_list=False):.2f}\u03BCm^2')
+
+    crypts_area = pixel_micro(crypts_area, ((51**2), (20**2)), is_list=False)
+    logger.debug(f'Crypts area: {crypts_area:.2f}\u03BCm^2')
 
     _, thresh = cv.threshold(image, 1, 255, cv.THRESH_BINARY)
     thresh = cv.cvtColor(thresh, cv.COLOR_BGR2GRAY)
     background_area = np.sum(thresh == 255)
-    logger.debug('Background area: '
-                 f'{pixel_micro(background_area, ((51**2), (20**2)), is_list=False):.2f}\u03BCm^2')
+    background_area = pixel_micro(
+        background_area, ((51**2), (20**2)), is_list=False)
+
+    logger.debug(f'Background area: {background_area:.2f}\u03BCm^2')
 
     density = [crypts_area/background_area]
     to_csv(density,
@@ -436,7 +439,8 @@ def elong_factor(image, crypts_list):
 def neighbors(crypts_list, mean_diameter):
     start_time = timer()
     logger.info('Initializing neighbors definition')
-    MAX_DIST = 2.3 * mean_diameter
+    # MAX_DIST = 2.3 * mean_diameter
+    MAX_DIST = 700
     logger.debug(f'Maximal distance to be a neighbor: {MAX_DIST:.2f} pixels')
     neighbors_list = [[] for crypt in range(len(crypts_list))]
     center_list = get_center(crypts_list)
@@ -494,14 +498,14 @@ def max_feret(image, crypts_list, algorithm='E'):
             y_distance = distance(top, bottom)
             x_distance = distance(left, right)
             if x_distance > y_distance:
-                cv.circle(image, left, 7, (255, 0, 0), -1)
-                cv.circle(image, right, 7, (255, 0, 0), -1)
-                cv.line(image, left, right, (255, 0, 0), thickness=12)
+                cv.circle(image, left, 7, (115, 158, 0), -1)
+                cv.circle(image, right, 7, (115, 158, 0), -1)
+                cv.line(image, left, right, (115, 158, 0), thickness=12)
                 feret_diameters.append(x_distance)
             else:
-                cv.circle(image, top, 7, (255, 0, 0), -1)
-                cv.circle(image, bottom, 7, (255, 0, 0), -1)
-                cv.line(image, top, bottom, (255, 0, 0), thickness=12)
+                cv.circle(image, top, 7, (115, 158, 0), -1)
+                cv.circle(image, bottom, 7, (115, 158, 0), -1)
+                cv.line(image, top, bottom, (115, 158, 0), thickness=12)
                 feret_diameters.append(y_distance)
     cv.imwrite('feret_fig.jpg', image, [cv.IMWRITE_JPEG_QUALITY, 75])
     mean_feret = np.mean(feret_diameters)
@@ -728,7 +732,7 @@ def pixel_micro(value_pixel, ratio=(51, 20), is_list=True):
     if is_list:
         value_micrometer = []
         for value in value_pixel:
-            value_micrometer.append((MICROMETER * int(value)) / PIXEL)
+            value_micrometer.append((MICROMETER * value) / PIXEL)
         return value_micrometer
     else:
         return (MICROMETER * value_pixel) / PIXEL
