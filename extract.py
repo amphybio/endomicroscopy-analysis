@@ -203,7 +203,14 @@ def imagej_rvss(imagej, source, output_path, xml, attempt=0):
                           stderr=subprocess.STDOUT, universal_newlines=True)
     log = rvss.stdout
     logger.debug(f'Attempt: {attempt}. RVSS output: {log}')
-    if 'No features model found' in log:
+
+    error_msg, has_error = ('', False)
+    if ('No features model found' in log):
+        error_msg, has_error = ('No features model found', True)
+    elif ('data points are not enough' in log):
+        error_msg, has_error = ('Data points are not enough', True)
+
+    if has_error:
         if attempt < 1:
             begin = log.find('frame')+5
             end = log.find('.png')
@@ -224,7 +231,7 @@ def imagej_rvss(imagej, source, output_path, xml, attempt=0):
             return imagej_rvss(imagej, source, output_path, xml, attempt+1)
         else:
             logger.error(
-                f'RVSS attempt: No features model found. Source: {source}')
+                f'RVSS attempt: {error_msg}. Source: {source}')
             return False
     logger.info(f"Finished ImageJ-RVSS wrapper. Ouput path: {output_path}")
     end_time = timer()
