@@ -146,7 +146,7 @@ def mosaic(source, imagej='/opt/Fiji.app/ImageJ-linux64', extension='mp4'):
             subprocess.run(f'rm -rf {str(rvss_dir.resolve())}',
                            shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
         end_video = timer()
-        logger.debug(f'Video {index} time elapsed: {end_video-start_video}s')
+        logger.debug(f'Video {index} time elapsed: {end_video-start_video:.2f}s')
         subprocess.run(f'mv -vn *tif {str(path.parents[0])}', shell=True,
                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
     logger.info(f'Finished mosaic. Source: {source}')
@@ -279,12 +279,19 @@ def kmeans_seg(image, k=4):
                 10, 1.0)
     logger.debug(f'No. groups: {k} | Criteria: {criteria}')
     ret, label, center = cv.kmeans(vectorized, k, None,
-                                   criteria, 10, cv.KMEANS_RANDOM_CENTERS)
-    labels = label.reshape((gray.shape))
+                                   criteria, 10, cv.KMEANS_PP_CENTERS)
 
+    max_group = [[]] * k
+    for group in range(k):
+        max_group[group] = (max(vectorized[label==group]), group)
+    max_group.sort()
+    logger.debug(f'Groups (max value, i-th): {max_group} ')
+
+    labels = label.reshape((gray.shape))
     segmented = np.zeros(gray.shape, np.uint8)
-    segmented[labels == 3] = gray[labels == 3]
-    segmented[labels == 2] = gray[labels == 2]
+    for darkest in range(2):
+        segmented[labels == max_group[darkest][1]] = gray[labels == max_group[darkest][1]]
+
     logger.info('Finished k-means')
     end_time = timer()
     logger.debug(
