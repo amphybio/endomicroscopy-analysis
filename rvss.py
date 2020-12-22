@@ -6,7 +6,7 @@ from register_virtual_stack import Register_Virtual_Stack_MT
 print('\nStarting RVSS...')
 
 # reference image
-reference_name = "frame000.png"
+reference_name = "frame0000.png"
 
 # shrinkage option (false)
 use_shrinking_constraint = 0
