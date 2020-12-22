@@ -53,11 +53,150 @@ def plot_style():
                               'ytick.direction': 'in', 'figure.figsize': (7, 3.09017)})
 
 
+def full_stat(source, outliers=False):
+    start_time = timer()
+    logger.debug('Initializing STAT csv data')
+
+    import subprocess
+    import pathlib
+
+    measure_list = ['axisr', 'dist', 'elong', 'feret',
+                    'min_dist', 'perim', 'round', 'spher', 'wall']
+
+    data_export = [["Parameter", "Mean", "STD"]]
+    for measure in measure_list:
+        output = subprocess.run(f'find {source} -type f -name "{measure}_data.csv"', shell=True,  stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, universal_newlines=True)
+        files = output.stdout.splitlines()
+        files.sort()
+        logger.debug(f'Measure: {measure}. No. of csv files found: {len(files)}'
+                     f'. Files: {files}')
+
+        prev_path = pathlib.Path(files[0])
+        data = [read_csv(prev_path)[0]]
+        data_id = read_csv(prev_path)[1]
+        prev_path = pathlib.Path(files[0]).parents[2]
+        data_id.insert(0, prev_path)
+        sum_crypts = 0
+        for f_path in files[1:]:
+            path = pathlib.Path(f_path).parents[2]
+            if prev_path == path:
+                dta = read_csv(f_path)[1]
+                data_id.extend(dta)
+            else:
+                sum_crypts += len(data_id)-1
+                logger.debug(f'Path: {prev_path}. No Crypts: {len(data_id)-1}')
+                data.append(data_id)
+                data_id = read_csv(f_path)[1]
+                data_id.insert(0, path)
+            prev_path = path
+
+        sum_crypts += len(data_id)-1
+        logger.debug(f'Path: {prev_path}. No Crypts: {len(data_id)-1}')
+        data.append(data_id)
+        data_float = [np.asarray(
+            list(filter(None, arr[1:])), dtype=np.float) for arr in data[1:]]
+        flat_list = [item for sublist in data_float for item in sublist]
+        if not outliers:
+            flat_list = rm_outliersG(data[0][1], flat_list)
+
+        logger.debug(f'GLOBAL {measure}. No. Crypts: {len(flat_list)}/{sum_crypts}.'
+                     f' Mean: {np.mean(flat_list):.2f}.'
+                     f' STD: {np.std(flat_list):.2f}')
+
+        data_export.append(
+            [data[0][1], np.mean(flat_list), np.std(flat_list)])
+
+        global_list = [data[0]]
+        global_list.append(flat_list)
+        to_csv(global_list, f'{measure}_global_data')
+        to_csv(data_export, 'summary-comb')
+        to_csv(data, f'{measure}_combined_data')
+    end_time = timer()
+    logger.debug(
+        f'STAT function time elapsed: {end_time-start_time:.2f}s')
+
+
+def dist_plotG(data, measure, ticks_number=[6, 6], decimals=[0, 3], outliers=False):
+    start_time = timer()
+    logger.info('Initializing distance histogram')
+    global_data = read_csv(f'{measure}_global_data.csv')
+    global_float = [np.asarray(list(filter(None, arr)), dtype=np.float)
+                    for arr in global_data[1:]]
+
+    data_float = [np.asarray(list(filter(None, arr[1:])), dtype=np.float)
+                  for arr in data[1:]]
+    if not outliers:
+        data_float = rm_outliers(data_float)  # Verificar
+    # logger.debug(f'S: {len(data_float)}. Data: {data_float}')
+
+    labels = [l[0][-3:] for l in data[1:]]
+    labels.insert(0, 'Global')
+    for idx, data_id in enumerate(data_float):
+        compare_data = []
+        compare_data.append(global_float[0])
+        compare_data.append(data_id)
+        plot_style()
+        _, ax = plt.subplots(1)
+        # logger.debug(f'S: {len(compare_data)}. Data: {compare_data}')
+        x_ticks = ticks_interval(
+            compare_data, ticks_number[0], decimals[0])
+
+        interval = x_ticks[1]-x_ticks[0]
+        logger.debug(
+            f'X-ticks range: {x_ticks[-1]-x_ticks[0]:.5f} |  No. of bins: {len(x_ticks)-1} | '
+            f'Bin width: {interval:.5f}')
+        frequencies_list = [0]
+        densities_list = [0]
+        for index, img_data in enumerate(compare_data[: 2]):
+            lab_ind = (index % 2)*idx + index
+            densities_list.append(ax.hist(img_data, density=True, bins=x_ticks,
+                                          alpha=.85, label=labels[lab_ind])[0])
+            densities = densities_list[index+1]
+            frequencies_list.append(densities * interval)
+            entropy, max_entropy, degree_disorder = shannon_entropy(
+                densities, x_ticks)
+            logger.info(f'Data {index} - Densities: '
+                        + str([f'{value:.5f}' for value in densities])
+                        + ' | Frequencies: '
+                        + str([f'{value:.5f}' for value in frequencies_list[index+1]])
+                        + f' | Entropy {entropy:.3f}, Max {max_entropy:.3f} | '
+                        + f'Degree of disorder: {degree_disorder:.3f}')
+        frequencies_list = frequencies_list[1:]
+        logger.info('Hellinger distance: '
+                    f'{hellinger_distance(frequencies_list[0], frequencies_list[1]):.3f}')
+        densities_list = densities_list[1:]
+
+        ax.set(title=data[0][1], ylabel="Density", xlabel=data[0][3], xticks=x_ticks,
+               yticks=ticks_interval(densities_list, ticks_number[1], decimals[1]))
+        # Optional line | IF decimals 0 >> astype(np.int)
+        # ax.set_xticklabels(ax.get_xticks().astype(int), size=17)
+        plt.legend(loc='upper right', prop={'size': 12})
+        plot = ax.get_figure()
+        plot.canvas.draw()
+        for index, label in enumerate(ax.get_yticklabels()):
+            if index % 2 == 1:
+                label.set_visible(True)
+            else:
+                label.set_visible(False)
+        name = data[idx+1][0]
+        plt.savefig(f"G-{name[-3:]}_{data[0][0]}_plot.tif",
+                    dpi=600, bbox_inches="tight")
+        plt.clf()
+    logger.info('Finished distance histogram')
+    end_time = timer()
+    logger.debug(
+        f'Distance histogram function time elapsed: {end_time-start_time:.2f}s')
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
 def join_csv(source, measure):
     start_time = timer()
     logger.debug('Initializing join csv data')
     import subprocess
-    csv_files = subprocess.run(f"ls -1v {source}*/{measure}_data.csv", shell=True,  stdout=subprocess.PIPE,
+    # csv_files = subprocess.run(f"ls -1v {source}*/{measure}_data.csv", shell=True,  stdout=subprocess.PIPE,
+    #                            stderr=subprocess.STDOUT, universal_newlines=True)
+    csv_files = subprocess.run(f'find {source} -type f -name "{measure}_data.csv"', shell=True,  stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT, universal_newlines=True)
     all_files = csv_files.stdout.splitlines()
     all_files.sort()
@@ -76,9 +215,122 @@ def join_csv(source, measure):
         f'Join csv function time elapsed: {end_time-start_time:.2f}s')
 
 
+def summary_comb(source, outliers=False):
+    start_time = timer()
+    logger.info('Initializing summary combination')
+    import subprocess
+    output = subprocess.run(f'find {source} -maxdepth 1 -type f -name "*combined*csv"', shell=True,  stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, universal_newlines=True)
+    csv_files = output.stdout.splitlines()
+    csv_files.sort()
+
+    logger.info(f'Files found - no.: {len(csv_files)} | Files: {csv_files}')
+    data_export = [["Parameter", "Mean", "STD"]]
+    for path in csv_files:
+        data = read_csv(path)
+        data_float = [np.asarray(
+            list(filter(None, arr[1:])), dtype=np.float) for arr in data[1:]]
+
+        flat_list = [item for sublist in data_float for item in sublist]
+
+        if not outliers:
+            flat_list = rm_outliersG(data[0][1], flat_list)
+
+        data_export.append(
+            [data[0][1], np.mean(flat_list), np.std(flat_list)])
+
+    to_csv(data_export, "summary-comb")
+    logger.info('Finished summary combination')
+    end_time = timer()
+    logger.debug(
+        f'Summary combination function time elapsed: {end_time-start_time:.2f}s')
+
+
+def rm_outliersG(par_name, data):
+    logger.debug(f'{par_name} length: {len(data)}')
+    ordered = np.sort(data)
+    Q1 = np.quantile(ordered, 0.25)
+    Q3 = np.quantile(ordered, 0.75)
+    IQR = Q3 - Q1
+    output = ordered[(ordered >= Q1 - 1.5*IQR) &
+                     (ordered <= Q3 + 1.5*IQR)]
+    logger.debug(f'Final length: {len(output)}')
+    return output
+
+
+def hist_plotG(data, ticks_number=[6, 6], decimals=[0, 3], outliers=False):
+    start_time = timer()
+    logger.info('Initializing histogram')
+    data_float = [np.asarray(list(filter(None, arr[1:])), dtype=np.float)
+                  for arr in data[1:]]
+    flat_list = [item for sublist in data_float for item in sublist]
+
+    if not outliers:
+        flat_list = rm_outliersG(data[0][1], flat_list)
+
+    plot_style()
+    _, ax = plt.subplots(1)
+    x_ticks = ticks_intervalG(flat_list, ticks_number[0], decimals[0])
+    densities = ax.hist(flat_list, density=True, bins=x_ticks, alpha=.85)[0]
+    ax.set(title=data[0][1], ylabel="Density", xlabel=data[0][3], xticks=x_ticks,
+           yticks=ticks_intervalG(densities, ticks_number[1], decimals[1]))
+    # Optional line | IF decimals 0 >> astype(np.int)
+    # ax.set_xticklabels(ax.get_xticks().astype(np.int), size=16)
+    plot = ax.get_figure()
+    plot.canvas.draw()
+    for index, label in enumerate(ax.get_yticklabels()):
+        if index % 2 == 1:
+            label.set_visible(True)
+        else:
+            label.set_visible(False)
+    plt.savefig(f"{data[0][0]}_hist_plot.tif",
+                dpi=600, bbox_inches="tight")
+    plt.clf()
+    logger.info('Finished histogram')
+    end_time = timer()
+    logger.debug(
+        f'Histogram function time elapsed: {end_time-start_time:.2f}s')
+
+
+def ticks_intervalG(data, quantity, decimals):
+    start_time = timer()
+    logger.debug('Initializing ticks interval')
+    max_value = max(data)
+    min_value = min(data)
+
+    interval = np.round((max_value - min_value) / quantity, decimals)
+    logger.debug(f'Min value: {min_value:.5f} | Max value: {max_value:.5f} | '
+                 f'No. ticks: {quantity} | Decimal places: {decimals} | '
+                 f'Interval: {interval:.5f}')
+
+    ticks = np.round(np.arange(min_value, max_value +
+                               interval, interval), decimals)
+    logger.debug('Pre-ticks: ' + str([f'{value:.5f}' for value in ticks]))
+
+    if max(ticks) < max_value:
+        ticks = np.append(ticks, ticks[-1]+interval)
+    if min(ticks) > min_value:
+        min_tick = ticks[0]-interval
+        if min_tick >= 0:
+            ticks = np.insert(ticks, 0,  min_tick)
+        else:
+            ticks = np.round(np.arange(0, max_value +
+                                       interval, interval), decimals)
+    logger.debug('Ticks: ' + str([f'{value:.5f}' for value in ticks]))
+    logger.debug('Finished ticks interval')
+    end_time = timer()
+    logger.debug(
+        f'Ticks interval function time elapsed: {end_time-start_time:.2f}s')
+    return ticks
+
+
+###############################################################################
+
+
 def rm_outliers(data):
     logger.debug('Initializing remove outliers')
     clean = []
+    # if data
     for index, line in enumerate(data):
         logger.debug(f'Data {index} length: {len(line)}')
         ordered = np.sort(line)
@@ -208,11 +460,13 @@ def jensen_shannon_distance(p, q, a=0.5):
     return np.sqrt(jensen_shannon_divergence)
 
 
-def hist_plot(data, ticks_number=[6, 6], decimals=[0, 3]):
+def hist_plot(data, ticks_number=[6, 6], decimals=[0, 3], outliers=True):
     start_time = timer()
     logger.info('Initializing histogram')
     data_float = [np.asarray(list(filter(None, arr)), dtype=np.float)
                   for arr in data[1:]]
+    if not outliers:
+        data_float = rm_outliers(data_float)
     plot_style()
     _, ax = plt.subplots(1)
     x_ticks = ticks_interval(data_float, ticks_number[0], decimals[0])
@@ -272,6 +526,7 @@ def ticks_interval(data, quantity, decimals):
     logger.debug('Initializing ticks interval')
     max_value = max(map(max, data))
     min_value = min(map(min, data))
+
     interval = np.round((max_value - min_value) / quantity, decimals)
     logger.debug(f'Min value: {min_value:.5f} | Max value: {max_value:.5f} | '
                  f'No. ticks: {quantity} | Decimal places: {decimals} | '
@@ -298,7 +553,7 @@ def ticks_interval(data, quantity, decimals):
     return ticks
 
 
-def summary_stats(source, outliers=False):
+def summary_stats(source, outliers=True):
     start_time = timer()
     logger.debug('Initializing summary data')
     import subprocess
@@ -383,21 +638,28 @@ def main():
             data = read_csv(source)
             if decimals is None:
                 hist_plot(data)
+                # hist_plotG(data)
             else:
-                hist_plot(
+                hist_plotG(
+                    # hist_plot(
                     data, ticks_number=decimals[:2], decimals=decimals[2:])
         elif (function == "dist-plot"):
             data = read_csv(source)
+            measure = input('Type measure: ')
             if decimals is None:
-                dist_plot(data)
+                # dist_plot(data, measure)
+                dist_plotG(data, measure)
             else:
-                dist_plot(
-                    data, ticks_number=decimals[:2], decimals=decimals[2:])
+                # dist_plot(
+                dist_plotG(
+                    data, measure, ticks_number=decimals[:2], decimals=decimals[2:])
         elif (function == "join-csv"):
             measure = args["measure"]
             join_csv(source, measure)
         elif (function == "summary"):
             summary_stats(source)
+        elif (function == "stat"):
+            full_stat(source)
         else:
             print("Undefined function")
             logger.error("Undefined function")
