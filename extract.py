@@ -33,8 +33,8 @@
 
 # USAGE
 # python extract.py -f mosaic -p midia/main/0000/
-# python extract.py -f stack -p midia/main/0000/frame/016-2017EM-PRE/rvss -i 100 200
 # python extract.py -f cryptometry -p midia/main/0000/016-2017EM-PRE-0-302TR.tif
+# python extract.py -f stack -p midia/main/0000/frame/016-2017EM-PRE/rvss -i 100 200
 
 import cv2 as cv
 import numpy as np

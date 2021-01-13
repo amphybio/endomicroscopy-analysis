@@ -121,8 +121,10 @@ def dist_plotG(data, measure, ticks_number=[6, 6], decimals=[0, 3], outliers=Fal
     start_time = timer()
     logger.info('Initializing distance histogram')
     global_data = read_csv(f'{measure}_global_data.csv')
+    logger.debug(f'Global: {global_data}')
     global_float = [np.asarray(list(filter(None, arr)), dtype=np.float)
                     for arr in global_data[1:]]
+    logger.debug(f'Global Float: {global_float}')
 
     data_float = [np.asarray(list(filter(None, arr[1:])), dtype=np.float)
                   for arr in data[1:]]
@@ -132,20 +134,28 @@ def dist_plotG(data, measure, ticks_number=[6, 6], decimals=[0, 3], outliers=Fal
 
     labels = [l[0][-3:] for l in data[1:]]
     labels.insert(0, 'Global')
+    x_ticks = ticks_interval(global_float, ticks_number[0], decimals[0])
+    interval = x_ticks[1]-x_ticks[0]
+    logger.debug(
+        f'X-ticks range: {x_ticks[-1]-x_ticks[0]:.5f} |  No. of bins: {len(x_ticks)-1} | '
+        f'Bin width: {interval:.5f}')
+    hellinger_list = []
+    disorder_list = []
     for idx, data_id in enumerate(data_float):
+        logger.debug(f'Data {labels[idx+1]} - Range: {min(data_id):.2f}..{max(data_id):.2f}'
+                     f' No. crypsts: {len(data_id)} | Values: {data_id}')
         compare_data = []
         compare_data.append(global_float[0])
         compare_data.append(data_id)
         plot_style()
         _, ax = plt.subplots(1)
         # logger.debug(f'S: {len(compare_data)}. Data: {compare_data}')
-        x_ticks = ticks_interval(
-            compare_data, ticks_number[0], decimals[0])
-
-        interval = x_ticks[1]-x_ticks[0]
-        logger.debug(
-            f'X-ticks range: {x_ticks[-1]-x_ticks[0]:.5f} |  No. of bins: {len(x_ticks)-1} | '
-            f'Bin width: {interval:.5f}')
+        # x_ticks = ticks_interval(
+        #     compare_data, ticks_number[0], decimals[0])
+        # interval = x_ticks[1]-x_ticks[0]
+        # logger.debug(
+        #     f'X-ticks range: {x_ticks[-1]-x_ticks[0]:.5f} |  No. of bins: {len(x_ticks)-1} | '
+        #     f'Bin width: {interval:.5f}')
         frequencies_list = [0]
         densities_list = [0]
         for index, img_data in enumerate(compare_data[: 2]):
@@ -162,9 +172,12 @@ def dist_plotG(data, measure, ticks_number=[6, 6], decimals=[0, 3], outliers=Fal
                         + str([f'{value:.5f}' for value in frequencies_list[index+1]])
                         + f' | Entropy {entropy:.3f}, Max {max_entropy:.3f} | '
                         + f'Degree of disorder: {degree_disorder:.3f}')
+        disorder_list.append((degree_disorder, f'{labels[idx+1]}'))
         frequencies_list = frequencies_list[1:]
-        logger.info('Hellinger distance: '
-                    f'{hellinger_distance(frequencies_list[0], frequencies_list[1]):.3f}')
+        hellinger_dist = hellinger_distance(
+            frequencies_list[0], frequencies_list[1])
+        logger.info(f'Hellinger distance: {hellinger_dist:.3f}')
+        hellinger_list.append((hellinger_dist, f'{labels[idx+1]}'))
         densities_list = densities_list[1:]
 
         ax.set(title=data[0][1], ylabel="Density", xlabel=data[0][3], xticks=x_ticks,
@@ -183,10 +196,130 @@ def dist_plotG(data, measure, ticks_number=[6, 6], decimals=[0, 3], outliers=Fal
         plt.savefig(f"G-{name[-3:]}_{data[0][0]}_plot.tif",
                     dpi=600, bbox_inches="tight")
         plt.clf()
+    hellinger_list.sort()
+    disorder_list.sort()
+    np.set_printoptions(precision=2)
+    logger.debug('Ordered Hellinger: ' +
+                 str([f'({value[0]:.3f}, {value[1]})' for value in hellinger_list]))
+    logger.debug('Ordered Degree of disorder: ' +
+                 str([f'({value[0]:.3f}, {value[1]})' for value in disorder_list]))
     logger.info('Finished distance histogram')
     end_time = timer()
     logger.debug(
         f'Distance histogram function time elapsed: {end_time-start_time:.2f}s')
+
+
+def subgroup(data, group, measure, ticks_number=[6, 6], decimals=[0, 3], outliers=False):
+    start_time = timer()
+    logger.info('Initializing subgroup')
+    # logger.debug(f'Group: {group} |  Mesuare: {measure}')
+    group_data = []
+    complementary_data = []
+    data_id = [l[0][-3:] for l in data[1:]]
+    # data_float = [np.asarray(list(filter(None, arr)), dtype=np.float)
+    #                 for arr in data[1:]]
+    for index, value in enumerate(data_id):
+        if value in group:
+            group_data.extend(data[index+1][1:])
+        else:
+            complementary_data.extend(data[index+1][1:])
+    # logger.debug(f'Group: {group_data}')
+    # logger.debug(f'Complementary: {complementary_data}')
+    # for v in group_data:
+        # print(float(v))
+    # quit()
+    group_float = [ float(arr) for arr in group_data]
+    complementary_float = [ float(arr) for arr in complementary_data]
+    # logger.debug(f'G: {group_float}')
+    if not outliers:
+        group_float = rm_outliersG(measure, group_float)
+        complementary_float = rm_outliersG(measure, complementary_float)
+    logger.debug(
+        f'No. crypts - Group: {len(group_float)} Complementary: {len(complementary_float)}'
+        f' | Mean ± std - Group: {np.mean(group_float):.2f}±{np.std(group_float):.2f}'
+        f' Complementary: {np.mean(complementary_float):.2f}±{np.std(complementary_float):.2f}')
+
+    ################################# Gráfico
+
+    global_data = read_csv(f'{measure}_global_data.csv')
+    logger.debug(f'Global: {global_data}')
+    global_float = [np.asarray(list(filter(None, arr)), dtype=np.float)
+                    for arr in global_data[1:]]
+
+    x_ticks = ticks_interval(global_float, ticks_number[0], decimals[0])
+    interval = x_ticks[1]-x_ticks[0]
+    logger.debug(
+        f'X-ticks range: {x_ticks[-1]-x_ticks[0]:.5f} |  No. of bins: {len(x_ticks)-1} | '
+        f'Bin width: {interval:.5f}')
+    hellinger_list = []
+    disorder_list = []
+    data_float = []
+    data_float.append(group_float)
+    data_float.append(complementary_float)
+    labels = ['Global', 'Complete', 'Incomplete']
+    for idx, data_id in enumerate(data_float):
+        logger.debug(f'Data {labels[idx]} - Range: {min(data_id):.2f}..{max(data_id):.2f}'
+                     f' No. crypsts: {len(data_id)} | Values: {data_id}')
+        compare_data = []
+        compare_data.append(global_float[0])
+        compare_data.append(data_id)
+        plot_style()
+        _, ax = plt.subplots(1)
+        # logger.debug(f'S: {len(compare_data)}. Data: {compare_data}')
+        # x_ticks = ticks_interval(
+        #     compare_data, ticks_number[0], decimals[0])
+        # interval = x_ticks[1]-x_ticks[0]
+        # logger.debug(
+        #     f'X-ticks range: {x_ticks[-1]-x_ticks[0]:.5f} |  No. of bins: {len(x_ticks)-1} | '
+        #     f'Bin width: {interval:.5f}')
+        frequencies_list = [0]
+        densities_list = [0]
+        for index, img_data in enumerate(compare_data[: 2]):
+            lab_ind = (index % 2)*idx + index
+            densities_list.append(ax.hist(img_data, density=True, bins=x_ticks,
+                                          alpha=.85, label=labels[lab_ind])[0])
+            densities = densities_list[index+1]
+            frequencies_list.append(densities * interval)
+            entropy, max_entropy, degree_disorder = shannon_entropy(
+                densities, x_ticks)
+            logger.info(f'Data {index} - Densities: '
+                        + str([f'{value:.5f}' for value in densities])
+                        + ' | Frequencies: '
+                        + str([f'{value:.5f}' for value in frequencies_list[index+1]])
+                        + f' | Entropy {entropy:.3f}, Max {max_entropy:.3f} | '
+                        + f'Degree of disorder: {degree_disorder:.3f}')
+        disorder_list.append((degree_disorder, f'{labels[idx+1]}'))
+        frequencies_list = frequencies_list[1:]
+        hellinger_dist = hellinger_distance(
+            frequencies_list[0], frequencies_list[1])
+        logger.info(f'Hellinger distance: {hellinger_dist:.3f}')
+        hellinger_list.append((hellinger_dist, f'{labels[idx+1]}'))
+        densities_list = densities_list[1:]
+
+        ax.set(title=data[0][1], ylabel="Density", xlabel=data[0][3], xticks=x_ticks,
+               yticks=ticks_interval(densities_list, ticks_number[1], decimals[1]))
+        # Optional line | IF decimals 0 >> astype(np.int)
+        # ax.set_xticklabels(ax.get_xticks().astype(int), size=17)
+        plt.legend(loc='upper right', prop={'size': 12})
+        plot = ax.get_figure()
+        plot.canvas.draw()
+        for index, label in enumerate(ax.get_yticklabels()):
+            if index % 2 == 1:
+                label.set_visible(True)
+            else:
+                label.set_visible(False)
+        name = labels[idx+1]
+        plt.savefig(f"CG-{name}_{data[0][0]}_plot.tif",
+                    dpi=600, bbox_inches="tight")
+        plt.clf()
+    hellinger_list.sort()
+    disorder_list.sort()
+
+    logger.info('Finished subgroups')
+    end_time = timer()
+    logger.debug(
+        f'Subgroup function time elapsed: {end_time-start_time:.2f}s')
+
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
@@ -325,7 +458,6 @@ def ticks_intervalG(data, quantity, decimals):
 
 
 ###############################################################################
-
 
 def rm_outliers(data):
     logger.debug('Initializing remove outliers')
@@ -611,6 +743,8 @@ def main():
                     help="Input file or directory of images path")
     ap.add_argument("-d", "--decimals", nargs='+', type=int, required=False,
                     help="Define number of decimals for plots ticks")
+    ap.add_argument("-g", "--group", nargs='+', type=str, required=False,
+                    help="Define group for plots")
     ap.add_argument("-m", "--measure", type=str, required=False,
                     help="Set measure to join CSV files")
 
@@ -619,6 +753,7 @@ def main():
     source = args["path"]
     decimals = args["decimals"]
     verbose = args["verbose"]
+    group = args["group"]
 
     global logger
     if verbose:
@@ -660,6 +795,15 @@ def main():
             summary_stats(source)
         elif (function == "stat"):
             full_stat(source)
+        elif (function == 'subgroup'):
+            data = read_csv(source)
+            measure = input('Type measure: ')
+            # measure = 'axisr'
+            if decimals is None:
+                subgroup(data, group, measure)
+            else:
+                subgroup(data, group, measure,
+                         ticks_number=decimals[:2], decimals=decimals[2:])
         else:
             print("Undefined function")
             logger.error("Undefined function")
