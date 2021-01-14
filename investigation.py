@@ -103,7 +103,7 @@ def full_stat(source, outliers=False):
         logger.debug(f'GLOBAL {measure}. No. Crypts: {len(flat_list)}/{sum_crypts}.'
                      f' Mean: {np.mean(flat_list):.2f}.'
                      f' STD: {np.std(flat_list):.2f}')
-
+        # logger.debug(f'NaN: {flat_list}')
         data_export.append(
             [data[0][1], np.mean(flat_list), np.std(flat_list)])
 
@@ -121,10 +121,10 @@ def dist_plotG(data, measure, ticks_number=[6, 6], decimals=[0, 3], outliers=Fal
     start_time = timer()
     logger.info('Initializing distance histogram')
     global_data = read_csv(f'{measure}_global_data.csv')
-    logger.debug(f'Global: {global_data}')
+    # logger.debug(f'Global: {global_data}')
     global_float = [np.asarray(list(filter(None, arr)), dtype=np.float)
                     for arr in global_data[1:]]
-    logger.debug(f'Global Float: {global_float}')
+    # logger.debug(f'Global Float: {global_float}')
 
     data_float = [np.asarray(list(filter(None, arr[1:])), dtype=np.float)
                   for arr in data[1:]]
@@ -142,8 +142,9 @@ def dist_plotG(data, measure, ticks_number=[6, 6], decimals=[0, 3], outliers=Fal
     hellinger_list = []
     disorder_list = []
     for idx, data_id in enumerate(data_float):
+        # logger.debug(f'>>> {len(data_id)}')
         logger.debug(f'Data {labels[idx+1]} - Range: {min(data_id):.2f}..{max(data_id):.2f}'
-                     f' No. crypsts: {len(data_id)} | Values: {data_id}')
+                     f' No. crypsts: {len(data_id)} | Values: data_id')
         compare_data = []
         compare_data.append(global_float[0])
         compare_data.append(data_id)
@@ -184,7 +185,8 @@ def dist_plotG(data, measure, ticks_number=[6, 6], decimals=[0, 3], outliers=Fal
                yticks=ticks_interval(densities_list, ticks_number[1], decimals[1]))
         # Optional line | IF decimals 0 >> astype(np.int)
         # ax.set_xticklabels(ax.get_xticks().astype(int), size=17)
-        plt.legend(loc='upper right', prop={'size': 12})
+        # plt.legend(loc='upper right', prop={'size': 12})
+        plt.legend(loc='upper left', prop={'size': 12})
         plot = ax.get_figure()
         plot.canvas.draw()
         for index, label in enumerate(ax.get_yticklabels()):
@@ -242,7 +244,7 @@ def subgroup(data, group, measure, ticks_number=[6, 6], decimals=[0, 3], outlier
     ################################# Gráfico
 
     global_data = read_csv(f'{measure}_global_data.csv')
-    logger.debug(f'Global: {global_data}')
+    # logger.debug(f'Global: {global_data}')
     global_float = [np.asarray(list(filter(None, arr)), dtype=np.float)
                     for arr in global_data[1:]]
 
@@ -259,7 +261,7 @@ def subgroup(data, group, measure, ticks_number=[6, 6], decimals=[0, 3], outlier
     labels = ['Global', 'Complete', 'Incomplete']
     for idx, data_id in enumerate(data_float):
         logger.debug(f'Data {labels[idx]} - Range: {min(data_id):.2f}..{max(data_id):.2f}'
-                     f' No. crypsts: {len(data_id)} | Values: {data_id}')
+                     f' No. crypsts: {len(data_id)} | Values: data_id')
         compare_data = []
         compare_data.append(global_float[0])
         compare_data.append(data_id)
@@ -300,7 +302,8 @@ def subgroup(data, group, measure, ticks_number=[6, 6], decimals=[0, 3], outlier
                yticks=ticks_interval(densities_list, ticks_number[1], decimals[1]))
         # Optional line | IF decimals 0 >> astype(np.int)
         # ax.set_xticklabels(ax.get_xticks().astype(int), size=17)
-        plt.legend(loc='upper right', prop={'size': 12})
+        # plt.legend(loc='upper right', prop={'size': 12})
+        plt.legend(loc='upper left', prop={'size': 12})
         plot = ax.get_figure()
         plot.canvas.draw()
         for index, label in enumerate(ax.get_yticklabels()):
@@ -382,6 +385,8 @@ def summary_comb(source, outliers=False):
 def rm_outliersG(par_name, data):
     logger.debug(f'{par_name} length: {len(data)}')
     ordered = np.sort(data)
+    # logger.debug(f'>>> {len(ordered)}')
+    ordered = ordered[~np.isnan(ordered)]
     Q1 = np.quantile(ordered, 0.25)
     Q3 = np.quantile(ordered, 0.75)
     IQR = Q3 - Q1
@@ -464,6 +469,7 @@ def rm_outliers(data):
     clean = []
     # if data
     for index, line in enumerate(data):
+        line = line[~np.isnan(line)]
         logger.debug(f'Data {index} length: {len(line)}')
         ordered = np.sort(line)
         Q1 = np.quantile(ordered, 0.25)
@@ -517,6 +523,7 @@ def dist_plot(data, ticks_number=[5, 7], decimals=[2, 3], outliers=True):
     # Optional line | IF decimals 0 >> astype(np.int)
     # ax.set_xticklabels(ax.get_xticks().astype(int), size=17)
     plt.legend(loc='upper right', prop={'size': 12})
+    # plt.legend(loc='upper left', prop={'size': 12})
     plot = ax.get_figure()
     plot.canvas.draw()
     for index, label in enumerate(ax.get_yticklabels()):
@@ -653,7 +660,7 @@ def box_plot(data, ticks_number=7, decimals=2):
     logger.debug(f'Box-plot function time elapsed: {end_time-start_time:.2f}s')
 
 
-def ticks_interval(data, quantity, decimals):
+def ticks_interval(data, quantity, decimals, pct=False):
     start_time = timer()
     logger.debug('Initializing ticks interval')
     max_value = max(map(max, data))
@@ -668,7 +675,11 @@ def ticks_interval(data, quantity, decimals):
                                interval, interval), decimals)
     logger.debug('Pre-ticks: ' + str([f'{value:.5f}' for value in ticks]))
 
-    if max(ticks) < max_value:
+    if pct and max(ticks) > 100:
+        min_tick = min(min(ticks),100-interval*(quantity+1))
+        ticks = np.round(np.arange( min_tick, 100.01, interval), decimals)
+        logger.debug('Pre-ticks(%): ' + str([f'{value:.5f}' for value in ticks]))
+    if max(ticks) < np.round(max_value, decimals):
         ticks = np.append(ticks, ticks[-1]+interval)
     if min(ticks) > min_value:
         min_tick = ticks[0]-interval
@@ -780,14 +791,15 @@ def main():
                     data, ticks_number=decimals[:2], decimals=decimals[2:])
         elif (function == "dist-plot"):
             data = read_csv(source)
-            measure = input('Type measure: ')
+            # measure = input('Type measure: ')
             if decimals is None:
-                # dist_plot(data, measure)
-                dist_plotG(data, measure)
+                dist_plot(data)
+                # dist_plotG(data, measure)
             else:
-                # dist_plot(
-                dist_plotG(
-                    data, measure, ticks_number=decimals[:2], decimals=decimals[2:])
+                dist_plot(
+                    data, ticks_number=decimals[:2], decimals=decimals[2:])
+                # dist_plotG(
+                #     data, measure, ticks_number=decimals[:2], decimals=decimals[2:])
         elif (function == "join-csv"):
             measure = args["measure"]
             join_csv(source, measure)
