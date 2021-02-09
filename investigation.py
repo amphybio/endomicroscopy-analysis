@@ -81,18 +81,20 @@ def full_stat(source, outliers=False):
         for f_path in files[1:]:
             path = pathlib.Path(f_path).parents[2]
             if prev_path == path:
+            # if str(prev_path)[:-1] == str(path)[:-1]:
                 dta = read_csv(f_path)[1]
                 data_id.extend(dta)
             else:
                 sum_crypts += len(data_id)-1
-                logger.debug(f'Path: {prev_path}. No Crypts: {len(data_id)-1}')
+                # logger.debug(f'ID: {np.asarray(data_id[1:]).astype("float")}')
+                logger.debug(f'Path: {prev_path}. No Crypts: {len(data_id)-1}. Mean: {np.mean(np.asarray(data_id[1:]).astype("float")):.2f}')
                 data.append(data_id)
                 data_id = read_csv(f_path)[1]
                 data_id.insert(0, path)
             prev_path = path
 
         sum_crypts += len(data_id)-1
-        logger.debug(f'Path: {prev_path}. No Crypts: {len(data_id)-1}')
+        logger.debug(f'Path: {prev_path}. No Crypts: {len(data_id)-1}. Mean: {np.mean(np.asarray(data_id[1:]).astype("float")):.2f}')
         data.append(data_id)
         data_float = [np.asarray(
             list(filter(None, arr[1:])), dtype=np.float) for arr in data[1:]]
@@ -133,6 +135,7 @@ def dist_plotG(data, measure, ticks_number=[6, 6], decimals=[0, 3], outliers=Fal
     # logger.debug(f'S: {len(data_float)}. Data: {data_float}')
 
     labels = [l[0][-3:] for l in data[1:]]
+    # labels = [l[0][-4:] for l in data[1:]]
     labels.insert(0, 'Global')
     x_ticks = ticks_interval(global_float, ticks_number[0], decimals[0])
     interval = x_ticks[1]-x_ticks[0]
@@ -185,8 +188,8 @@ def dist_plotG(data, measure, ticks_number=[6, 6], decimals=[0, 3], outliers=Fal
                yticks=ticks_interval(densities_list, ticks_number[1], decimals[1]))
         # Optional line | IF decimals 0 >> astype(np.int)
         # ax.set_xticklabels(ax.get_xticks().astype(int), size=17)
-        # plt.legend(loc='upper right', prop={'size': 12})
-        plt.legend(loc='upper left', prop={'size': 12})
+        plt.legend(loc='upper right', prop={'size': 12})
+        # plt.legend(loc='upper left', prop={'size': 12})
         plot = ax.get_figure()
         plot.canvas.draw()
         for index, label in enumerate(ax.get_yticklabels()):
@@ -198,12 +201,14 @@ def dist_plotG(data, measure, ticks_number=[6, 6], decimals=[0, 3], outliers=Fal
         plt.savefig(f"G-{name[-3:]}_{data[0][0]}_plot.tif",
                     dpi=600, bbox_inches="tight")
         plt.clf()
-    hellinger_list.sort()
-    disorder_list.sort()
+    # hellinger_list.sort()
+    # disorder_list.sort()
     np.set_printoptions(precision=2)
-    logger.debug('Ordered Hellinger: ' +
+    # logger.debug('Ordered Hellinger: ' +
+    logger.debug('Hellinger: ' +
                  str([f'({value[0]:.3f}, {value[1]})' for value in hellinger_list]))
-    logger.debug('Ordered Degree of disorder: ' +
+    # logger.debug('Ordered Degree of disorder: ' +
+    logger.debug('Degree of disorder: ' +
                  str([f'({value[0]:.3f}, {value[1]})' for value in disorder_list]))
     logger.info('Finished distance histogram')
     end_time = timer()
@@ -218,6 +223,7 @@ def subgroup(data, group, measure, ticks_number=[6, 6], decimals=[0, 3], outlier
     group_data = []
     complementary_data = []
     data_id = [l[0][-3:] for l in data[1:]]
+    # data_id = [l[0][-4:] for l in data[1:]]
     # data_float = [np.asarray(list(filter(None, arr)), dtype=np.float)
     #                 for arr in data[1:]]
     for index, value in enumerate(data_id):
@@ -500,9 +506,10 @@ def dist_plot(data, ticks_number=[5, 7], decimals=[2, 3], outliers=True):
         f'Bin width: {interval:.5f}')
     frequencies_list = [0]
     densities_list = [0]
+    # for index, img_data in enumerate(data_float[: 3]):
     for index, img_data in enumerate(data_float[: 2]):
         densities_list.append(ax.hist(img_data, density=True, bins=x_ticks,
-                                      alpha=.85, label=data[index+1][0])[0])
+                                      alpha=(.85-(index*.1)), label=data[index+1][0])[0])
         densities = densities_list[index+1]
         frequencies_list.append(densities * interval)
         entropy, max_entropy, degree_disorder = shannon_entropy(
@@ -516,6 +523,10 @@ def dist_plot(data, ticks_number=[5, 7], decimals=[2, 3], outliers=True):
     frequencies_list = frequencies_list[1:]
     logger.info('Hellinger distance: '
                 f'{hellinger_distance(frequencies_list[0], frequencies_list[1]):.3f}')
+    # logger.info('Hellinger distance GxR: '
+    #             f'{hellinger_distance(frequencies_list[0], frequencies_list[1]):.3f}')
+    # logger.info('Hellinger distance GxT: '
+    #             f'{hellinger_distance(frequencies_list[0], frequencies_list[2]):.3f}')
     densities_list = densities_list[1:]
 
     ax.set(title=data[0][1], ylabel="Density", xlabel=data[0][3], xticks=x_ticks,
