@@ -33,8 +33,8 @@
 
 # USAGE
 # python extract.py -f mosaic -p midia/main/0000/
-# python extract.py -f stack -p midia/main/0000/frame/016-2017EM-PRE/rvss -i 100 200
 # python extract.py -f cryptometry -p midia/main/0000/016-2017EM-PRE-0-302TR.tif
+# python extract.py -f stack -p midia/main/0000/frame/016-2017EM-PRE/rvss -i 100 200
 
 import cv2 as cv
 import numpy as np
@@ -114,10 +114,14 @@ def zip_move(path, dest_path):
     return key_sand
 
 
-def mosaic(source, imagej='/opt/Fiji.app/ImageJ-linux64', extension='mp4'):
+def mosaic(source, imagej='/opt/Fiji.app/ImageJ-linux64', extension=['*.mp4', '*.mpeg']):
     start_time = timer()
     logger.info('Initializing mosaic')
-    output = subprocess.run(f'find {source} -type f -name "*{extension}"', shell=True,  stdout=subprocess.PIPE,
+    cmd = f'find {source} -type f -name "{extension[0]}"'
+    for ext in extension[1:]:
+        cmd += f' -o -name "{ext}"'
+    logger.debug(f'Command: {cmd}')
+    output = subprocess.run(cmd, shell=True,  stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, universal_newlines=True)
     files = output.stdout.splitlines()
     files.sort()
@@ -137,6 +141,8 @@ def mosaic(source, imagej='/opt/Fiji.app/ImageJ-linux64', extension='mp4'):
         rvsx_dir.mkdir()
         if imagej_rvss(imagej, sub_dir, rvss_dir, rvsx_dir):
             stack_frames(rvss_dir, path.stem)
+            subprocess.run(f'mv -vn *tif {str(path.parents[0])}', shell=True,
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
             zip_id = zip_move(rvss_dir, sub_dir)
             logger.info(f'Directory {rvss_dir} was zipped! Code: {zip_id}')
             logger.info(f'Video {video_source} mosaicing completed')
@@ -146,9 +152,8 @@ def mosaic(source, imagej='/opt/Fiji.app/ImageJ-linux64', extension='mp4'):
             subprocess.run(f'rm -rf {str(rvss_dir.resolve())}',
                            shell=True,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
         end_video = timer()
-        logger.debug(f'Video {index} time elapsed: {end_video-start_video}s')
-        subprocess.run(f'mv -vn *tif {str(path.parents[0])}', shell=True,
-                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+        logger.debug(
+            f'Video {index} time elapsed: {end_video-start_video:.2f}s')
     logger.info(f'Finished mosaic. Source: {source}')
     end_time = timer()
     logger.debug(f'Mosaic function time elapsed: {end_time-start_time:.2f}s')
@@ -211,7 +216,11 @@ def imagej_rvss(imagej, source, output_path, xml, attempt=0):
         error_msg, has_error = ('Data points are not enough', True)
 
     if has_error:
-        if attempt < 1:
+        if ('enough' in error_msg) or attempt > 0:
+            logger.error(
+                f'RVSS attempt: {error_msg}. Source: {source}')
+            return False
+        else:
             begin = log.find('frame')+5
             end = log.find('.png')
             first = int(log[begin:end])
@@ -222,17 +231,13 @@ def imagej_rvss(imagej, source, output_path, xml, attempt=0):
             last = int(count.stdout)
             logger.debug(f'Removing frames in the range {first}..{last-1}')
             for index in range(first, last):
-                rm_cmd = f'rm -rf {str(source.resolve())}/frame{index}.png'
+                rm_cmd = f'rm -rf {str(source.resolve())}/frame{index:04d}.png'
                 subprocess.run(rm_cmd, shell=True,  stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT, universal_newlines=True)
             subprocess.run(f'rm -rf {str(output_path)}/', shell=True,
                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
             output_path.mkdir()
             return imagej_rvss(imagej, source, output_path, xml, attempt+1)
-        else:
-            logger.error(
-                f'RVSS attempt: {error_msg}. Source: {source}')
-            return False
     logger.info(f"Finished ImageJ-RVSS wrapper. Ouput path: {output_path}")
     end_time = timer()
     logger.debug(
@@ -250,7 +255,7 @@ def video_frame(source, output_path):
     while success:
         gray_frame = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
         image = remove_text(gray_frame)
-        cv.imwrite(f'{str(output_path)}/frame{count:03d}.png', image)
+        cv.imwrite(f'{str(output_path)}/frame{count:04d}.png', image)
         success, image = vidcap.read()
         count += 1
     logger.info(f'Finished video to frames. No. frames: {count}')
@@ -261,8 +266,10 @@ def video_frame(source, output_path):
 
 def remove_text(image):
     # Remove white text from frame images
-    cv.rectangle(image, (0, 0), (80, 30), (0, 0, 0), -1)
-    cv.rectangle(image, (496, 504), (576, 584), (0, 0, 0), -1)
+    point = int(((np.sqrt(2)*max(image.shape))-max(image.shape))/3)
+    cv.rectangle(image, (0, 0), (point, point), (0, 0, 0), -1)
+    cv.rectangle(image, (image.shape[0]-point, image.shape[1]-point),
+                 (image.shape[0], image.shape[1]), (0, 0, 0), -1)
     return image
 
 
@@ -279,12 +286,20 @@ def kmeans_seg(image, k=4):
                 10, 1.0)
     logger.debug(f'No. groups: {k} | Criteria: {criteria}')
     ret, label, center = cv.kmeans(vectorized, k, None,
-                                   criteria, 10, cv.KMEANS_RANDOM_CENTERS)
-    labels = label.reshape((gray.shape))
+                                   criteria, 10, cv.KMEANS_PP_CENTERS)
 
+    max_group = [[]] * k
+    for group in range(k):
+        max_group[group] = (max(vectorized[label == group]), group)
+    max_group.sort()
+    logger.debug(f'Groups (max value, i-th): {max_group} ')
+
+    labels = label.reshape((gray.shape))
     segmented = np.zeros(gray.shape, np.uint8)
-    segmented[labels == 3] = gray[labels == 3]
-    segmented[labels == 2] = gray[labels == 2]
+    for darkest in range(2):
+        segmented[labels == max_group[darkest][1]
+                  ] = gray[labels == max_group[darkest][1]]
+
     logger.info('Finished k-means')
     end_time = timer()
     logger.debug(
@@ -353,10 +368,15 @@ def ellipse_seg(image, iterat=9):
     return crypts_resized, image_resized
 
 
-def cryptometry(source, extension='tif'):
+# def cryptometry(source, extension=['*.tif', '*.png' ]):
+def cryptometry(source, extension=['*.tif']):
     start_time = timer()
     logger.info('Initializing cryptometry')
-    output = subprocess.run(f'find {source} -type f -name "*{extension}"', shell=True,  stdout=subprocess.PIPE,
+    cmd = f'find {source} -type f -name "{extension[0]}"'
+    for ext in extension[1:]:
+        cmd += f' -o -name "{ext}"'
+    logger.debug(f'Command: {cmd}')
+    output = subprocess.run(cmd, shell=True,  stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, universal_newlines=True)
     files = output.stdout.splitlines()
     files.sort()
@@ -371,6 +391,9 @@ def cryptometry(source, extension='tif'):
         dir_structure(path, dir_list)
         image = cv.imread(image_source)
         crypts_list, roi_image = ellipse_seg(image)
+        if len(crypts_list) == 0:
+            logger.warning(f'Image source {image_source} have no crypts!')
+            continue
         draw_countours(roi_image, crypts_list)
         axis_ratio(roi_image.copy(), crypts_list)
         perimeter_shape(roi_image.copy(), crypts_list)
@@ -613,10 +636,11 @@ def intercrypt_dist(image, crypts_list, neighbors_list):
     center_list = get_center(crypts_list)
     for center in center_list:
         cv.circle(image,  (center), 7, (115, 158, 0), -1)
-    intercrypt_list = []
     min_dist_list = []
+    mean_dist_list = []
     for index, first_center in enumerate(center_list):
         min_dist = MAX_DIST
+        intercrypt_list = []
         for neighbor in neighbors_list[index]:
             second_center = center_list[neighbor[0]]
             cv.line(image, first_center, second_center,
@@ -624,19 +648,20 @@ def intercrypt_dist(image, crypts_list, neighbors_list):
             intercrypt_list.append(neighbor[1])
             if neighbor[1] < min_dist:
                 min_dist = neighbor[1]
+        mean_dist_list.append(np.mean(intercrypt_list))
         min_dist_list.append(min_dist)
     cv.imwrite('dist_fig.jpg', image, [cv.IMWRITE_JPEG_QUALITY, 75])
-    intercrypt_list = pixel_micro(intercrypt_list)
-    to_csv(intercrypt_list, ['dist',
-                             'Mean intercrypt distance', '', 'Distance (\u03BCm)'])
+    mean_dist_list = pixel_micro(mean_dist_list)
+    to_csv(mean_dist_list, ['dist',
+                            'Mean intercrypt distance', '', 'Distance (\u03BCm)'])
     min_dist_list = pixel_micro(min_dist_list)
     to_csv(min_dist_list, ['min_dist',
                            'Minimal intercrypt distance', '', 'Distance (\u03BCm)'])
     logger.info('Finished intercrypt distance')
     end_time = timer()
     logger.debug(f'Intercrypt distance function time elapsed: {end_time-start_time:.2f}s | '
-                 f'Mean intercrypt distance(\u03BCm) mean: {np.mean(intercrypt_list):.2f} and std: {np.std(intercrypt_list):.2f} | '
-                 'Mean intercrypt distance(\u03BCm) list: ' + str([f'{value:.2f}' for value in intercrypt_list]))
+                 f'Mean intercrypt distance(\u03BCm) mean: {np.mean(mean_dist_list):.2f} and std: {np.std(mean_dist_list):.2f} | '
+                 'Mean intercrypt distance(\u03BCm) list: ' + str([f'{value:.2f}' for value in mean_dist_list]))
     logger.debug(f'Minimal intercrypt distance(\u03BCm) mean: {np.mean(min_dist_list):.2f} and std: {np.std(min_dist_list):.2f} | '
                  'Minimal intercrypt distance(\u03BCm) list: ' + str([f'{value:.2f}' for value in min_dist_list]))
 
