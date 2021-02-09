@@ -113,6 +113,44 @@ def zip_move(path, dest_path):
     logger.debug(f'Zip-Move function time elapsed: {end_time-start_time:.2f}s')
     return key_sand
 
+def frame_analysis(source, extension=['*.mp4', '*.mpeg'], ftype=0):
+    # ftype: (0) Video; (other) Image
+    start_time = timer()
+    logger.info('Initializing frame analysis')
+    logger.debug(f'Parameters - source: {source} | ext: {extension} | ftype: {int(ftype)}')
+    cmd = f'find {source} -type f -name "{extension[0]}"'
+    for ext in extension[1:]:
+        cmd += f' -o -name "{ext}"'
+    logger.debug(f'Command: {cmd}')
+    output = subprocess.run(cmd, shell=True,  stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, universal_newlines=True)
+    files = output.stdout.splitlines()
+    files.sort()
+    logger.info(f'No. of {extension} files found: {len(files)}')
+    logger.debug(f'Source: {source} | Files: {files}')
+    if int(ftype) == 0:
+        import pathlib
+        for index, video_source in enumerate(files):
+            start_video = timer()
+            logger.info(f'Video {index}: {video_source}')
+            path = pathlib.Path(video_source)
+            dir_structure(path, ['frame'])
+            sub_dir = path.parents[0] / 'frame' / path.stem
+            source_hist = video_frame(video_source, sub_dir)[:,:,0]
+            end_video = timer()
+            logger.debug(
+                f'Video {index} time elapsed: {end_video-start_video:.2f}s')
+            np.savetxt(f'{sub_dir.parents[0]}/{path.stem}-frame-histogram.csv', source_hist, delimiter=',', fmt='%d')
+    else:
+        source_hist = np.zeros((1, 256), dtype=np.int)
+        for index, image_source in enumerate(files):
+            logger.info(f'Image {index}: {image_source}')
+            image = cv.imread(image_source, cv.IMREAD_GRAYSCALE)
+            source_hist = np.vstack([source_hist, cv.calcHist([image],[0],None,[256],[0,256]).T])
+        np.savetxt('global-frame-histogram.csv', source_hist[1:], delimiter=',', fmt='%d')
+    logger.info(f'Finished frame analysis. Source: {source}')
+    end_time = timer()
+    logger.debug(f'Frame analysis function time elapsed: {end_time-start_time:.2f}s')
 
 def mosaic(source, imagej='/opt/Fiji.app/ImageJ-linux64', extension=['*.mp4', '*.mpeg']):
     start_time = timer()
@@ -252,9 +290,11 @@ def video_frame(source, output_path):
     vidcap = cv.VideoCapture(source)
     success, image = vidcap.read()
     count = 0
+    frame_hist = []
     while success:
         gray_frame = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
         image = remove_text(gray_frame)
+        frame_hist.append(cv.calcHist([image],[0],None,[256],[0,256]))
         cv.imwrite(f'{str(output_path)}/frame{count:04d}.png', image)
         success, image = vidcap.read()
         count += 1
@@ -262,6 +302,7 @@ def video_frame(source, output_path):
     end_time = timer()
     logger.debug(
         f'Video to frames function elapsed time {end_time-start_time:.2f}')
+    return np.asarray(frame_hist, dtype=np.int)
 
 
 def remove_text(image):
@@ -799,12 +840,14 @@ def main():
                     help="Input file or directory of images path")
     ap.add_argument("-i", "--interval", nargs='+', type=int, required=False,
                     help="Define range of frames in Stack function")
-
+    ap.add_argument("-s", "--settings", nargs='+', type=str, required=False,
+                    help="Define parameters settings of frames analysis function")
     args = vars(ap.parse_args())
     function = args["function"]
     source = args["path"]
     interval = args["interval"]
     verbose = args["verbose"]
+    settings = args["settings"]
 
     global logger
     if verbose:
@@ -820,6 +863,11 @@ def main():
             substack_frames(source, name, interval)
         elif (function == "cryptometry"):
             cryptometry(source)
+        elif (function == "frame-hist"):
+            if settings is None:
+                frame_analysis(source)
+            else:
+                frame_analysis(source, settings[0], settings[1])
         else:
             logger.error("Undefined function")
     else:
