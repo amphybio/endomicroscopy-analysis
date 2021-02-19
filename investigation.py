@@ -41,6 +41,7 @@ import csv
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+import pandas as pd
 import logendo as le
 from timeit import default_timer as timer
 
@@ -52,6 +53,52 @@ def plot_style():
                               'lines.linewidth': 2, 'xtick.direction': 'in',
                               'ytick.direction': 'in', 'figure.figsize': (7, 3.09017)})
 
+def histogram_analysis(data):
+    plot_style()
+    _, ax = plt.subplots(1)
+    black_area = min(data.iloc[:,0])
+    mean_data = data.mean(axis=0)
+    mean_data[0] = mean_data[0] - black_area
+    # np.savetxt('mean.txt', mean_data, fmt='%d')
+    # x = np.arange(256)
+    # dict_data = dict(zip(x, mean_data))
+    # keys = dict_data.keys()
+    # vals = dict_data.values()
+    # freq = list(vals) / np.sum(list(vals))
+    glob_freq = mean_data / np.sum(mean_data)
+    list_hell = []
+    # for index, hist in enumerate(data):
+    data = pd.read_csv('midia/main/HIST/001/1/frame/005-2016-frame-histogram.csv', header=None)
+    # data = pd.read_csv('midia/main/HIST/001/1/frame/012-2016-frame-histogram.csv', header=None)
+    # data = pd.read_csv('midia/main/HIST/001/1/frame/017-2016-frame-histogram.csv', header=None)
+    # data = pd.read_csv('midia/main/HIST/006/1/frame/001-2017-frame-histogram.csv', header=None)
+    # data = pd.read_csv('midia/main/HIST/006/1/frame/005-2017-frame-histogram.csv', header=None)
+    # data = pd.read_csv('midia/main/HIST/006/1/frame/007-2017-frame-histogram.csv', header=None)
+    # data = pd.read_csv('midia/main/HIST/006/1/frame/013-2017-frame-histogram.csv', header=None)
+    count=0
+    for index, hist in data.iterrows():
+        # logger.debug(f'Hist {index}: {hist}')
+        hist[0] = hist[0] - black_area
+        hist_freq = hist / np.sum(hist)
+        dist_hell = hellinger_distance(glob_freq, hist_freq)
+        if dist_hell > 0.3:
+            count+=1
+        entropy, max_entropy, degree_disorder = shannon_entropy(hist_freq,[0,1,255])
+        list_hell.append(dist_hell)
+        logger.debug(f'Frame: {index:4d} | H: {dist_hell:.3f} | S: {entropy:.3f}/{max_entropy:.3f}')
+    logger.debug(f'Frames above the threshold: {count:4d} / {data.shape[0]:4d} | %: {(count/data.shape[0])*100:.2f}')
+    logger.debug(f'Range: {np.min(list_hell):.3f} .. {np.max(list_hell):.3f} | '
+                 f'Mean: {np.mean(list_hell):.3f} | ')
+    logger.debug(f'Soma: {np.sum(mean_data)} | Soma freq: {np.sum(glob_freq)} | Freq: glob_freq')
+    # plt.bar(list(keys), list(vals))
+    # sns.barplot(x=list(keys), y=list(vals))
+    # plt.plot(list(vals))
+    plt.plot(glob_freq)
+    plt.savefig('glob_hist.png', dpi=600, bbox_inches="tight")
+    plt.clf()
+    plt.hist(list_hell)
+    plt.savefig('helling_dist.png', dpi=600, bbox_inches="tight")
+    # plt.show()
 
 def full_stat(source, outliers=False):
     start_time = timer()
@@ -827,8 +874,13 @@ def main():
             else:
                 subgroup(data, group, measure,
                          ticks_number=decimals[:2], decimals=decimals[2:])
+        elif (function == "frame-hist"):
+            data = pd.read_csv(source, header=None)
+            if decimals is None:
+                histogram_analysis(data)
+            else:
+                box_plot(data, ticks_number=decimals[0], decimals=decimals[1])
         else:
-            print("Undefined function")
             logger.error("Undefined function")
     else:
         logger.error(
