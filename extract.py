@@ -436,8 +436,10 @@ def density(image, crypts_list):
     logger.debug(f'Background area: {background_area:.2f}\u03BCm^2')
 
     density = [crypts_area/background_area]
-    to_csv(density,
-           ['density', 'Density', '', 'Ratio'])
+    # to_csv(density,
+    #        ['density', 'Density', '', 'Ratio'])
+    np.savetxt('density_data.csv', [density], delimiter=',',
+               fmt='%f', header='density,Density,, Ratio', comments='')
     logger.info('Finished density')
     end_time = timer()
     logger.debug(
@@ -457,7 +459,9 @@ def elong_factor(image, crypts_list):
         box = np.int0(box)
         cv.drawContours(image, [box], 0, (115, 158, 0), 12)
     cv.imwrite('elong_fig.jpg', image, [cv.IMWRITE_JPEG_QUALITY, 75])
-    to_csv(elongation_list, ['elong', 'Elongation factor', '', 'Ratio'])
+    # to_csv(elongation_list, ['elong', 'Elongation factor', '', 'Ratio'])
+    np.savetxt('elong_data.csv', [elongation_list], delimiter=',',
+               fmt='%f', header='elong,Elongation factor,,Ratio', comments='')
     logger.info('Finished elongation factor')
     end_time = timer()
     logger.debug(f'Elongation factor function time elapsed: {end_time-start_time:.2f}s | '
@@ -540,8 +544,10 @@ def max_feret(image, crypts_list, algorithm='E'):
     cv.imwrite('feret_fig.jpg', image, [cv.IMWRITE_JPEG_QUALITY, 75])
     mean_feret = np.mean(feret_diameters)
     feret_diameters = pixel_micro(feret_diameters)
-    to_csv(feret_diameters, ['feret',
-                             'Maximal feret diameter', '', 'Diameter (\u03BCm)'])
+    # to_csv(feret_diameters, ['feret',
+    #                          'Maximal feret diameter', '', 'Diameter (\u03BCm)'])
+    np.savetxt('feret_data.csv', [feret_diameters], delimiter=',',
+               fmt='%f', header='feret,Maximal feret diameter,,Diameter (\u03BCm)', comments='')
     logger.info('Finished maximal feret diameter')
     end_time = timer()
     logger.debug(f'Maximal feret diameter function time elapsed: {end_time-start_time:.2f}s | '
@@ -605,8 +611,10 @@ def wall_thickness(image, crypts_list, neighbors_list, algorithm='E'):
             wall_neighbor_point[0]), (115, 158, 0), 12)
     cv.imwrite('wall_fig.jpg', image, [cv.IMWRITE_JPEG_QUALITY, 75])
     wall_list = pixel_micro(wall_list)
-    to_csv(wall_list, ['wall',
-                       'Wall thickness', '', 'Distance (\u03BCm)'])
+    # to_csv(wall_list, ['wall',
+    #                    'Wall thickness', '', 'Distance (\u03BCm)'])
+    np.savetxt('wall_data.csv', [wall_list], delimiter=',',
+               fmt='%f', header='wall,Wall thickness,,Distance (\u03BCm)', comments='')
     logger.info('Finished wall thickness')
     end_time = timer()
     logger.debug(f'Wall thickness function time elapsed: {end_time-start_time:.2f}s | '
@@ -652,11 +660,15 @@ def intercrypt_dist(image, crypts_list, neighbors_list):
         min_dist_list.append(min_dist)
     cv.imwrite('dist_fig.jpg', image, [cv.IMWRITE_JPEG_QUALITY, 75])
     mean_dist_list = pixel_micro(mean_dist_list)
-    to_csv(mean_dist_list, ['dist',
-                            'Mean intercrypt distance', '', 'Distance (\u03BCm)'])
+    # to_csv(mean_dist_list, ['dist',
+    #                         'Mean intercrypt distance', '', 'Distance (\u03BCm)'])
+    np.savetxt('dist_data.csv', [mean_dist_list], delimiter=',',
+               fmt='%f', header='dist,Mean intercrypt distance,,Distance (\u03BCm)', comments='')
     min_dist_list = pixel_micro(min_dist_list)
-    to_csv(min_dist_list, ['min_dist',
-                           'Minimal intercrypt distance', '', 'Distance (\u03BCm)'])
+    # to_csv(min_dist_list, ['min_dist',
+    #                        'Minimal intercrypt distance', '', 'Distance (\u03BCm)'])
+    np.savetxt('min_dist_data.csv', [min_dist_list], delimiter=',',
+               fmt='%f', header='min_dist,Minimal intercrypt distance,,Distance (\u03BCm)', comments='')
     logger.info('Finished intercrypt distance')
     end_time = timer()
     logger.debug(f'Intercrypt distance function time elapsed: {end_time-start_time:.2f}s | '
@@ -703,10 +715,12 @@ def perimeter_shape(image, crypts_list):
                      f'Perimeter: {perimeter:.2f}\u03BCm | Area: {area:.2f}\u03BCm^2 | '
                      f'Sphericity: {spher:.2f}% | Roundness: {roundness:.2f}%')
     cv.imwrite('perim_fig.jpg', image, [cv.IMWRITE_JPEG_QUALITY, 75])
-    to_csv(perim_list, ['perim', 'Crypts Perimeter',
-                        '', 'Perimeter (\u03BCm)'])
-    to_csv(spher_list, ['spher', 'Crypts sphericity', '', 'Sphericity (%)'])
-    to_csv(roundness_list, ['round', 'Crypts roundness', '', 'Roundness (%)'])
+    np.savetxt('perim_data.csv', [perim_list], delimiter=',', fmt='%f',
+               header='perim,Crypts Perimeter,,Perimeter (\u03BCm)', comments='')
+    np.savetxt('spher_data.csv', [spher_list], delimiter=',', fmt='%f',
+               header='spher,Crypts sphericity,,Sphericity (%)', comments='')
+    np.savetxt('round_data.csv', [roundness_list], delimiter=',', fmt='%f',
+               header='round,Crypts roundness,,Roundness (%)', comments='')
     logger.info('Finished perimeter-shape')
     end_time = timer()
     logger.debug(f'Perimeter-shape function time elapsed: {end_time-start_time:.2f}s | '
@@ -749,7 +763,8 @@ def axis_ratio(image, crypts_list):
         axisr_list.append(max(width, height) / min(width, height))
         cv.rectangle(image, (x, y), (x + width, y + height), (115, 158, 0), 12)
     cv.imwrite('axisr_fig.jpg', image, [cv.IMWRITE_JPEG_QUALITY, 75])
-    to_csv(axisr_list, ['axisr', 'Axis Ratio', '', 'Ratio'])
+    np.savetxt('axisr_data.csv', [axisr_list], delimiter=',',
+               fmt='%f', header='axisr,Axis Ratio,, Ratio', comments='')
     logger.info('Finished axis ratio')
     end_time = timer()
     logger.debug(f'Axis ratio function time elapsed: {end_time-start_time:.2f}s | '
@@ -770,17 +785,17 @@ def pixel_micro(value_pixel, ratio=(51, 20), is_list=True):
         return (MICROMETER * value_pixel) / PIXEL
 
 
-def to_csv(data, labels, is_list=False):
-    import csv
-    with open(f"{labels[0]}_data.csv", mode='w') as csv_file:
-        writer = csv.writer(csv_file, delimiter=',',
-                            quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        writer.writerow(labels)
-        if not is_list:
-            writer.writerow(data)
-        else:
-            for row in data:
-                writer.writerow(row)
+# def to_csv(data, labels, is_list=False):
+#     import csv
+#     with open(f"{labels[0]}_data.csv", mode='w') as csv_file:
+#         writer = csv.writer(csv_file, delimiter=',',
+#                             quotechar='"', quoting=csv.QUOTE_MINIMAL)
+#         writer.writerow(labels)
+#         if not is_list:
+#             writer.writerow(data)
+#         else:
+#             for row in data:
+#                 writer.writerow(row)
 
 
 def draw_countours(image, crypts_list):

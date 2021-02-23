@@ -39,11 +39,13 @@
 
 import csv
 import numpy as np
+import pandas as pd
+
 import seaborn as sns
 import matplotlib.pyplot as plt
-import logendo as le
 from timeit import default_timer as timer
 
+import logendo as le
 
 def plot_style():
     # Define style plots
@@ -52,27 +54,44 @@ def plot_style():
                               'lines.linewidth': 2, 'xtick.direction': 'in',
                               'ytick.direction': 'in', 'figure.figsize': (7, 3.09017)})
 
+def search_files(source, pattern):
+    logger.debug('Initializing search files function.')
+    import subprocess
+    output = subprocess.run(f'find {source} -type f -name "{pattern}"', shell=True,  stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, universal_newlines=True)
+    files = output.stdout.splitlines()
+    files.sort()
+    logger.info(f'Pattern: {pattern}. No. of files found: {len(files)}')
+    logger.debug(f'Files found: {files}')
+    logger.debug('Finished search files function.')
+    return files
 
-def full_stat(source, outliers=False):
+def data_stats(source, outliers=False, measures=['axisr', 'dist', 'elong',
+                                                'feret', 'min_dist', 'perim', 'round', 'spher', 'wall']):
     start_time = timer()
     logger.debug('Initializing STAT csv data')
 
-    import subprocess
+    # import subprocess
     import pathlib
 
-    measure_list = ['axisr', 'dist', 'elong', 'feret',
-                    'min_dist', 'perim', 'round', 'spher', 'wall']
+    # measure_list = ['axisr', 'dist', 'elong', 'feret', 'min_dist', 'perim',
+    #                 'round', 'spher', 'wall']
 
-    data_export = [["Parameter", "Mean", "STD"]]
-    for measure in measure_list:
-        output = subprocess.run(f'find {source} -type f -name "{measure}_data.csv"', shell=True,  stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT, universal_newlines=True)
-        files = output.stdout.splitlines()
-        files.sort()
-        logger.debug(f'Measure: {measure}. No. of csv files found: {len(files)}'
-                     f'. Files: {files}')
+    # summary_data = [['Measure', 'Mean', 'STD','No. Images','No. Crypts']]
+    data_export = [['Measure', 'Mean', 'STD']]
+
+    for measure in measures:
+        # output = subprocess.run(f'find {source} -type f -name "{measure}_data.csv"', shell=True,  stdout=subprocess.PIPE,
+        #                         stderr=subprocess.STDOUT, universal_newlines=True)
+        # files = output.stdout.splitlines()
+        # files.sort()
+        # logger.debug(f'Measure: {measure}. No. of csv files found: {len(files)}'
+        #              f'. Files: {files}')
+
+        files = search_files(source, f'{measure}_data.csv')
 
         prev_path = pathlib.Path(files[0])
+        # data = [read_csv(prev_path)[0]]
         data = [read_csv(prev_path)[0]]
         data_id = read_csv(prev_path)[1]
         prev_path = pathlib.Path(files[0]).parents[2]
@@ -80,13 +99,13 @@ def full_stat(source, outliers=False):
         sum_crypts = 0
         for f_path in files[1:]:
             path = pathlib.Path(f_path).parents[2]
-            if prev_path == path:
-            # if str(prev_path)[:-1] == str(path)[:-1]:
+            # if prev_path == path:
+            if str(prev_path)[:-1] == str(path)[:-1]:
                 dta = read_csv(f_path)[1]
                 data_id.extend(dta)
             else:
                 sum_crypts += len(data_id)-1
-                # logger.debug(f'ID: {np.asarray(data_id[1:]).astype("float")}')
+                logger.debug(f'ID: {np.asarray(data_id[1:]).astype("float")}')
                 logger.debug(f'Path: {prev_path}. No Crypts: {len(data_id)-1}. Mean: {np.mean(np.asarray(data_id[1:]).astype("float")):.2f}')
                 data.append(data_id)
                 data_id = read_csv(f_path)[1]
@@ -506,8 +525,8 @@ def dist_plot(data, ticks_number=[5, 7], decimals=[2, 3], outliers=True):
         f'Bin width: {interval:.5f}')
     frequencies_list = [0]
     densities_list = [0]
-    # for index, img_data in enumerate(data_float[: 3]):
-    for index, img_data in enumerate(data_float[: 2]):
+    for index, img_data in enumerate(data_float[: 3]):
+    # for index, img_data in enumerate(data_float[: 2]):
         densities_list.append(ax.hist(img_data, density=True, bins=x_ticks,
                                       alpha=(.85-(index*.1)), label=data[index+1][0])[0])
         densities = densities_list[index+1]
@@ -521,20 +540,20 @@ def dist_plot(data, ticks_number=[5, 7], decimals=[2, 3], outliers=True):
                     + f' | Entropy {entropy:.3f}, Max {max_entropy:.3f} | '
                     + f'Degree of disorder: {degree_disorder:.3f}')
     frequencies_list = frequencies_list[1:]
-    logger.info('Hellinger distance: '
-                f'{hellinger_distance(frequencies_list[0], frequencies_list[1]):.3f}')
-    # logger.info('Hellinger distance GxR: '
+    # logger.info('Hellinger distance: '
     #             f'{hellinger_distance(frequencies_list[0], frequencies_list[1]):.3f}')
-    # logger.info('Hellinger distance GxT: '
-    #             f'{hellinger_distance(frequencies_list[0], frequencies_list[2]):.3f}')
+    logger.info('Hellinger distance GxR: '
+                f'{hellinger_distance(frequencies_list[0], frequencies_list[1]):.3f}')
+    logger.info('Hellinger distance GxT: '
+                f'{hellinger_distance(frequencies_list[0], frequencies_list[2]):.3f}')
     densities_list = densities_list[1:]
 
     ax.set(title=data[0][1], ylabel="Density", xlabel=data[0][3], xticks=x_ticks,
            yticks=ticks_interval(densities_list, ticks_number[1], decimals[1]))
     # Optional line | IF decimals 0 >> astype(np.int)
     # ax.set_xticklabels(ax.get_xticks().astype(int), size=17)
-    plt.legend(loc='upper right', prop={'size': 12})
-    # plt.legend(loc='upper left', prop={'size': 12})
+    # plt.legend(loc='upper right', prop={'size': 12})
+    plt.legend(loc='upper left', prop={'size': 12})
     plot = ax.get_figure()
     plot.canvas.draw()
     for index, label in enumerate(ax.get_yticklabels()):
@@ -671,7 +690,7 @@ def box_plot(data, ticks_number=7, decimals=2):
     logger.debug(f'Box-plot function time elapsed: {end_time-start_time:.2f}s')
 
 
-def ticks_interval(data, quantity, decimals, pct=False):
+def ticks_interval(data, quantity, decimals, pct=True):
     start_time = timer()
     logger.debug('Initializing ticks interval')
     max_value = max(map(max, data))
@@ -816,8 +835,8 @@ def main():
             join_csv(source, measure)
         elif (function == "summary"):
             summary_stats(source)
-        elif (function == "stat"):
-            full_stat(source)
+        elif (function == "data-stats"):
+            data_stats(source)
         elif (function == 'subgroup'):
             data = read_csv(source)
             measure = input('Type measure: ')
