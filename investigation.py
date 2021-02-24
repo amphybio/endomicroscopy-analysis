@@ -53,10 +53,123 @@ def plot_style():
                               'lines.linewidth': 2, 'xtick.direction': 'in',
                               'ytick.direction': 'in', 'figure.figsize': (7, 3.09017)})
 
+
+def full_hist_analysis(source):
+    import subprocess
+    output = subprocess.run(f'find {source} -type f -name "*-frame-histogram.csv"', shell=True,  stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, universal_newlines=True)
+    files = output.stdout.splitlines()
+    files.sort()
+    global_norm = np.zeros((1, 256), dtype=np.int)
+    global_tumor = np.zeros((1, 256), dtype=np.int)
+    for fpath in files:
+        if '/0/' in fpath:
+            global_norm = np.vstack(
+                [global_norm, pd.read_csv(fpath, header=None).values])
+        else:
+            global_tumor = np.vstack(
+                [global_tumor, pd.read_csv(fpath, header=None).values])
+    global_norm = global_norm[1:]
+    global_tumor = global_tumor[1:]
+    logger.debug(
+        f'Shape - norm: {global_norm.shape}, tumor: {global_tumor.shape}')
+    global_norm_mean = global_norm.mean(axis=0)
+    glob_norm_freq = global_norm_mean / np.sum(global_norm_mean)
+
+    hellinger_global = []
+    for hist in global_norm:
+        hist_freq = hist / np.sum(hist)
+        hellinger_global.append(hellinger_distance(glob_norm_freq, hist_freq))
+    norm_threshold = np.mean(hellinger_global) + np.std(hellinger_global)
+    logger.debug(f'Nomral Hellinger - Threshold: {norm_threshold:.2f} '
+                 f'| Mean: {np.mean(hellinger_global):.2f} | '
+                 f'STD:{np.std(hellinger_global):.2f}')
+
+    global_tumor_mean = global_tumor.mean(axis=0)
+    glob_tumor_freq = global_tumor_mean / np.sum(global_tumor_mean)
+
+    barplot_hist_N = []
+    barplot_hist_T = []
+    for pix in range(256):
+        barplot_hist_N.extend(
+            np.repeat(pix, int(global_norm_mean[pix])).tolist())
+        barplot_hist_T.extend(
+            np.repeat(pix, int(global_tumor_mean[pix])).tolist())
+
+    plot_style()
+    _, ax = plt.subplots(1)
+    # plt.plot(glob_norm_freq)
+    plt.hist(barplot_hist_N, bins=255)
+    plt.savefig('glob_norm_hist.png', dpi=600, bbox_inches="tight")
+    plt.clf()
+    # plt.plot(glob_tumor_freq)
+    plt.hist(barplot_hist_T, bins=255)
+    plt.savefig('glob_tumor_hist.png', dpi=600, bbox_inches="tight")
+    plt.clf()
+    import pathlib as pl
+    for fpath in files:
+        frames_hist = pd.read_csv(fpath, header=None)
+        list_hell_N = []
+        list_hell_T = []
+        count = 0
+        frames_list = []
+        logger.debug(f'File: {fpath}')
+        for index, hist in frames_hist.iterrows():
+            hist_freq = hist / np.sum(hist)
+            dist_hell_N = hellinger_distance(glob_norm_freq, hist_freq)
+            dist_hell_T = hellinger_distance(glob_tumor_freq, hist_freq)
+            if dist_hell_N > norm_threshold:
+                count += 1
+                frames_list.append(index)
+            list_hell_N.append(dist_hell_N)
+            list_hell_T.append(dist_hell_T)
+
+        path = pl.Path(fpath)
+        densities_list = []
+        plot_style()
+        _, ax = plt.subplots(1)
+        data_ticks = np.vstack([list_hell_N, list_hell_T])
+        x_ticks = ticks_interval(data_ticks, 5, 2)
+        densities_list.append(ax.hist(list_hell_N, density=True,
+                                      bins=x_ticks, alpha=.85, label='Normal')[0])
+        densities_list.append(ax.hist(list_hell_T, density=True,
+                                      bins=x_ticks, alpha=.85, label='Tumor')[0])
+        ax.set(title='Hellinger distance distribution', ylabel="Density", xlabel='Hellinger distance', xticks=x_ticks,
+               yticks=ticks_interval(densities_list, 6, 1))
+        plt.legend(loc='upper right', prop={'size': 12})
+        plot = ax.get_figure()
+        plot.canvas.draw()
+        for index, label in enumerate(ax.get_yticklabels()):
+            if index % 2 == 1:
+                label.set_visible(True)
+            else:
+                label.set_visible(False)
+        plt.savefig(
+            f'{path.parents[0]}/{path.stem}-helling_dist.png', dpi=600, bbox_inches="tight")
+        entropy, max_entropy, degree_disorder = shannon_entropy(
+            densities_list[0], x_ticks)
+
+        logger.debug(
+            f'Shannon Normal - E:{entropy:.2f}/{max_entropy:.2f} DD:{degree_disorder:.2f}')
+
+        entropy, max_entropy, degree_disorder = shannon_entropy(
+            densities_list[1], x_ticks)
+        logger.debug(
+            f'Shannon Tumor - E:{entropy:.2f}/{max_entropy:.2f} DD:{degree_disorder:.2f}')
+
+        logger.debug(
+            f'Frames above the Normal threshold: {count:4d} / {frames_hist.shape[0]:4d} '
+            f'| %: {(count/frames_hist.shape[0])*100:.2f} | Frames: frames_list')
+        logger.debug(
+            f'NORMAL - Range: {np.min(list_hell_N):.3f} .. {np.max(list_hell_N):.3f} | ' f'Mean: {np.mean(list_hell_N):.3f} | ')
+        logger.debug(
+            f'TUMOR - Range: {np.min(list_hell_T):.3f} .. {np.max(list_hell_T):.3f} | ' f'Mean: {np.mean(list_hell_T):.3f} | ')
+
+
 def histogram_analysis(data):
     plot_style()
     _, ax = plt.subplots(1)
-    black_area = min(data.iloc[:,0])
+    black_area = min(data.iloc[:, 0])
     mean_data = data.mean(axis=0)
     mean_data[0] = mean_data[0] - black_area
     # np.savetxt('mean.txt', mean_data, fmt='%d')
@@ -68,28 +181,33 @@ def histogram_analysis(data):
     glob_freq = mean_data / np.sum(mean_data)
     list_hell = []
     # for index, hist in enumerate(data):
-    data = pd.read_csv('midia/main/HIST/001/1/frame/005-2016-frame-histogram.csv', header=None)
+    data = pd.read_csv(
+        'midia/main/HIST/001/1/frame/005-2016-frame-histogram.csv', header=None)
     # data = pd.read_csv('midia/main/HIST/001/1/frame/012-2016-frame-histogram.csv', header=None)
     # data = pd.read_csv('midia/main/HIST/001/1/frame/017-2016-frame-histogram.csv', header=None)
     # data = pd.read_csv('midia/main/HIST/006/1/frame/001-2017-frame-histogram.csv', header=None)
     # data = pd.read_csv('midia/main/HIST/006/1/frame/005-2017-frame-histogram.csv', header=None)
     # data = pd.read_csv('midia/main/HIST/006/1/frame/007-2017-frame-histogram.csv', header=None)
     # data = pd.read_csv('midia/main/HIST/006/1/frame/013-2017-frame-histogram.csv', header=None)
-    count=0
+    count = 0
     for index, hist in data.iterrows():
         # logger.debug(f'Hist {index}: {hist}')
         hist[0] = hist[0] - black_area
         hist_freq = hist / np.sum(hist)
         dist_hell = hellinger_distance(glob_freq, hist_freq)
         if dist_hell > 0.3:
-            count+=1
-        entropy, max_entropy, degree_disorder = shannon_entropy(hist_freq,[0,1,255])
+            count += 1
+        entropy, max_entropy, degree_disorder = shannon_entropy(hist_freq, [
+                                                                0, 1, 255])
         list_hell.append(dist_hell)
-        logger.debug(f'Frame: {index:4d} | H: {dist_hell:.3f} | S: {entropy:.3f}/{max_entropy:.3f}')
-    logger.debug(f'Frames above the threshold: {count:4d} / {data.shape[0]:4d} | %: {(count/data.shape[0])*100:.2f}')
+        logger.debug(
+            f'Frame: {index:4d} | H: {dist_hell:.3f} | S: {entropy:.3f}/{max_entropy:.3f}')
+    logger.debug(
+        f'Frames above the threshold: {count:4d} / {data.shape[0]:4d} | %: {(count/data.shape[0])*100:.2f}')
     logger.debug(f'Range: {np.min(list_hell):.3f} .. {np.max(list_hell):.3f} | '
                  f'Mean: {np.mean(list_hell):.3f} | ')
-    logger.debug(f'Soma: {np.sum(mean_data)} | Soma freq: {np.sum(glob_freq)} | Freq: glob_freq')
+    logger.debug(
+        f'Soma: {np.sum(mean_data)} | Soma freq: {np.sum(glob_freq)} | Freq: glob_freq')
     # plt.bar(list(keys), list(vals))
     # sns.barplot(x=list(keys), y=list(vals))
     # plt.plot(list(vals))
@@ -99,6 +217,7 @@ def histogram_analysis(data):
     plt.hist(list_hell)
     plt.savefig('helling_dist.png', dpi=600, bbox_inches="tight")
     # plt.show()
+
 
 def full_stat(source, outliers=False):
     start_time = timer()
@@ -128,20 +247,22 @@ def full_stat(source, outliers=False):
         for f_path in files[1:]:
             path = pathlib.Path(f_path).parents[2]
             if prev_path == path:
-            # if str(prev_path)[:-1] == str(path)[:-1]:
+                # if str(prev_path)[:-1] == str(path)[:-1]:
                 dta = read_csv(f_path)[1]
                 data_id.extend(dta)
             else:
                 sum_crypts += len(data_id)-1
                 # logger.debug(f'ID: {np.asarray(data_id[1:]).astype("float")}')
-                logger.debug(f'Path: {prev_path}. No Crypts: {len(data_id)-1}. Mean: {np.mean(np.asarray(data_id[1:]).astype("float")):.2f}')
+                logger.debug(
+                    f'Path: {prev_path}. No Crypts: {len(data_id)-1}. Mean: {np.mean(np.asarray(data_id[1:]).astype("float")):.2f}')
                 data.append(data_id)
                 data_id = read_csv(f_path)[1]
                 data_id.insert(0, path)
             prev_path = path
 
         sum_crypts += len(data_id)-1
-        logger.debug(f'Path: {prev_path}. No Crypts: {len(data_id)-1}. Mean: {np.mean(np.asarray(data_id[1:]).astype("float")):.2f}')
+        logger.debug(
+            f'Path: {prev_path}. No Crypts: {len(data_id)-1}. Mean: {np.mean(np.asarray(data_id[1:]).astype("float")):.2f}')
         data.append(data_id)
         data_float = [np.asarray(
             list(filter(None, arr[1:])), dtype=np.float) for arr in data[1:]]
@@ -283,8 +404,8 @@ def subgroup(data, group, measure, ticks_number=[6, 6], decimals=[0, 3], outlier
     # for v in group_data:
         # print(float(v))
     # quit()
-    group_float = [ float(arr) for arr in group_data]
-    complementary_float = [ float(arr) for arr in complementary_data]
+    group_float = [float(arr) for arr in group_data]
+    complementary_float = [float(arr) for arr in complementary_data]
     # logger.debug(f'G: {group_float}')
     if not outliers:
         group_float = rm_outliersG(measure, group_float)
@@ -294,7 +415,7 @@ def subgroup(data, group, measure, ticks_number=[6, 6], decimals=[0, 3], outlier
         f' | Mean ± std - Group: {np.mean(group_float):.2f}±{np.std(group_float):.2f}'
         f' Complementary: {np.mean(complementary_float):.2f}±{np.std(complementary_float):.2f}')
 
-    ################################# Gráfico
+    # Gráfico
 
     global_data = read_csv(f'{measure}_global_data.csv')
     # logger.debug(f'Global: {global_data}')
@@ -721,8 +842,10 @@ def box_plot(data, ticks_number=7, decimals=2):
 def ticks_interval(data, quantity, decimals, pct=False):
     start_time = timer()
     logger.debug('Initializing ticks interval')
-    max_value = max(map(max, data))
-    min_value = min(map(min, data))
+    # max_value = max(map(max, data))
+    max_value = np.max(data)
+    # min_value = min(map(min, data))
+    min_value = np.min(data)
 
     interval = np.round((max_value - min_value) / quantity, decimals)
     logger.debug(f'Min value: {min_value:.5f} | Max value: {max_value:.5f} | '
@@ -734,9 +857,10 @@ def ticks_interval(data, quantity, decimals, pct=False):
     logger.debug('Pre-ticks: ' + str([f'{value:.5f}' for value in ticks]))
 
     if pct and max(ticks) > 100:
-        min_tick = min(min(ticks),100-interval*(quantity+1))
-        ticks = np.round(np.arange( min_tick, 100.01, interval), decimals)
-        logger.debug('Pre-ticks(%): ' + str([f'{value:.5f}' for value in ticks]))
+        min_tick = min(min(ticks), 100-interval*(quantity+1))
+        ticks = np.round(np.arange(min_tick, 100.01, interval), decimals)
+        logger.debug('Pre-ticks(%): ' +
+                     str([f'{value:.5f}' for value in ticks]))
     if max(ticks) < np.round(max_value, decimals):
         ticks = np.append(ticks, ticks[-1]+interval)
     if min(ticks) > min_value:
@@ -880,6 +1004,8 @@ def main():
                 histogram_analysis(data)
             else:
                 box_plot(data, ticks_number=decimals[0], decimals=decimals[1])
+        elif (function == 'full-frame'):
+            full_hist_analysis(source)
         else:
             logger.error("Undefined function")
     else:

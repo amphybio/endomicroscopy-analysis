@@ -291,10 +291,13 @@ def video_frame(source, output_path):
     success, image = vidcap.read()
     count = 0
     frame_hist = []
+    black = black_area(image)
     while success:
         gray_frame = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
         image = remove_text(gray_frame)
-        frame_hist.append(cv.calcHist([image],[0],None,[256],[0,256]))
+        histogram = cv.calcHist([image],[0],None,[256],[0,256])
+        histogram[0] = histogram[0] - black
+        frame_hist.append(histogram)
         cv.imwrite(f'{str(output_path)}/frame{count:04d}.png', image)
         success, image = vidcap.read()
         count += 1
@@ -304,6 +307,17 @@ def video_frame(source, output_path):
         f'Video to frames function elapsed time {end_time-start_time:.2f}')
     return np.asarray(frame_hist, dtype=np.int)
 
+def black_area(image):
+    gray_frame = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+    gray_frame = remove_text(gray_frame)
+    ret,thresh = cv.threshold(gray_frame, 6, 255, 0)
+    contours, hierarchy = cv.findContours(thresh, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
+    c = max(contours, key = cv.contourArea)
+    (x,y),radius = cv.minEnclosingCircle(c)
+    center = (int(x),int(y))
+    radius = int(radius)
+    cv.circle(gray_frame,center,radius,(255),-1)
+    return np.sum(gray_frame == 0)
 
 def remove_text(image):
     # Remove white text from frame images
