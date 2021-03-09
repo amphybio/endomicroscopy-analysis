@@ -54,7 +54,202 @@ def plot_style():
                               'ytick.direction': 'in', 'figure.figsize': (7, 3.09017)})
 
 
-def full_hist_analysis(source):
+def ext_mode(x):
+    values, counts = np.unique(x, return_counts=True)
+    m = counts.argmax()
+    return values[m], counts[m]
+
+
+def find_files(source, pattern=['.csv']):
+    cmd = f'find {source} -type f -name "*{pattern[0]}"'
+    for patt in pattern[1:]:
+        cmd += f' -o -name "*{patt}"'
+    logger.debug(f'Find command: {cmd}')
+
+    import subprocess
+    output = subprocess.run(cmd, shell=True,  stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, universal_newlines=True)
+    paths = output.stdout.splitlines()
+    paths.sort()
+    logger.debug(f'Files found: {paths}')
+    return paths
+
+
+def rm_noise_frame(histogram, frame_threshold=75, light_max_freq=0.95, dark_max_freq=0.988):
+    frame_freq_hist = np.empty((0, 256), np.float)
+    rm_list = []
+    for index, hist in enumerate(histogram):
+        hist_freq = hist / np.sum(hist)
+        if np.sum(hist_freq[frame_threshold:]) > light_max_freq:
+            rm_list.append(index)
+            logger.debug(
+                f'Ligth frame noise - idx {index}, freq: {np.sum(hist_freq[frame_threshold:]):.3f}')
+        elif np.sum(hist_freq[:frame_threshold]) > dark_max_freq:
+            rm_list.append(index)
+            logger.debug(
+                f'Dark frame noise - idx {index}, freq: {np.sum(hist_freq[:frame_threshold]):.3f}')
+        else:
+            # frame_freq_hist = np.append(frame_freq_hist, hist_freq, axis=0)
+            frame_freq_hist = np.vstack([frame_freq_hist, hist_freq])
+    clean_histogram = np.delete(histogram, rm_list, axis=0)
+    logger.info(f'No. frames removed: {len(rm_list)}. List: {rm_list}')
+    return clean_histogram, frame_freq_hist
+
+
+def histogram_distance(ref_histogram, hist_freq_frames, video_interval):
+    mean_hist = ref_histogram.mean(axis=0)
+    # histogram_plot(mean_hist, ???)
+    ref_hist_freq = mean_hist / np.sum(mean_hist)
+    hellinger_list = []
+    for idx in range(len(video_interval)-1):
+        distances = []
+        for hist in hist_freq_frames[video_interval[idx]:video_interval[idx+1]]:
+            dist = hellinger_distance(hist, ref_hist_freq)
+            distances.append(dist)
+        hellinger_list.append(distances)
+    return hellinger_list
+
+
+def distance_distribution_plot(first_distribution, second_distribution):
+    densities_list = []
+    aux_list = first_distribution.copy()
+    aux_list.extend(second_distribution)
+    plot_style()
+    _, ax = plt.subplots(1)
+    data_ticks = aux_list
+    x_ticks = ticks_interval(data_ticks, 5, 2)
+    logger.debug(
+        f'N-Range: {np.min(first_distribution):.3f}..{np.max(first_distribution):.3f}')
+    logger.debug(
+        f'T-Range: {np.min(second_distribution):.3f}..{np.max(second_distribution):.3f}')
+    densities_list.append(ax.hist(first_distribution, density=True,
+                                  bins=x_ticks, alpha=.85, label='Normal')[0])
+    densities_list.append(ax.hist(second_distribution, density=True,
+                                  bins=x_ticks, alpha=.85, label='Tumor')[0])
+    ax.set(title='Hellinger distance distribution', ylabel="Density", xlabel='Hellinger distance', xticks=x_ticks,
+           yticks=ticks_interval(densities_list, 6, 1))
+    plt.legend(loc='upper right', prop={'size': 12})
+    plot = ax.get_figure()
+    plot.canvas.draw()
+    for index, label in enumerate(ax.get_yticklabels()):
+        if index % 2 == 1:
+            label.set_visible(True)
+        else:
+            label.set_visible(False)
+    plt.savefig(
+        'N-T-helling_dist.png', dpi=600, bbox_inches="tight")
+    entropy, max_entropy, degree_disorder = shannon_entropy(
+        densities_list[0], x_ticks)
+
+    logger.debug(
+        f'Shannon Normal - E:{entropy:.2f}/{max_entropy:.2f} DD:{degree_disorder:.2f}')
+
+    entropy, max_entropy, degree_disorder = shannon_entropy(
+        densities_list[1], x_ticks)
+    logger.debug(
+        f'Shannon Tumor - E:{entropy:.2f}/{max_entropy:.2f} DD:{degree_disorder:.2f}')
+    return 0
+
+
+def histogram_plot(histogram, path):
+    barplot = []
+    for intensity in range(256):
+        barplot.extend(
+            np.repeat(intensity, histogram[intensity]))
+    plot_style()
+    _, ax = plt.subplots(1)
+    density = ax.hist(barplot, density=True, bins=256, alpha=.85)[0]
+    ax.set(title=f'Intensity histogram video', ylabel="Relative frequency", xlabel='Pixel intensity', xticks=np.arange(0, 255, 50),
+           yticks=ticks_interval(density, 6, 3))
+    plot = ax.get_figure()
+    plot.canvas.draw()
+    for index, label in enumerate(ax.get_yticklabels()):
+        if index % 2 == 1:
+            label.set_visible(True)
+        else:
+            label.set_visible(False)
+    plt.savefig(f'{path.parents[0]}/{path.stem}.png',
+                dpi=600, bbox_inches="tight")
+    plt.clf()
+
+
+def build_ref_mean(histogram, video_intervals):
+    mean_histograms = np.empty((0, 256), np.float)
+    for idx in range(len(video_intervals)-1):
+        logger.debug(
+            f'Index {idx}: interval[{video_intervals[idx]},{video_intervals[idx+1]}]')
+        mean_histograms = np.vstack([mean_histograms, np.mean(
+            histogram[video_intervals[idx]:video_intervals[idx+1]], axis=0)])
+    logger.debug(f'Mean output: {mean_histograms.shape}')
+    return mean_histograms
+
+
+def histogram_multplot(histogram, path_list, histogram_index):
+    mean_histograms = build_ref_mean(histogram, histogram_index)
+    logger.debug(
+        f'Mean: {mean_histograms.ndim} {mean_histograms.shape}, Paths: {path_list}')
+    if mean_histograms.ndim < 2:
+        histogram_plot(mean_histograms, path_list[0])
+    else:
+        for idx, hist in enumerate(mean_histograms):
+            histogram_plot(hist, path_list[idx])
+
+
+def full_hist_analysis(source, clean=True):
+    files_path = find_files(source, ['-frame-histogram.csv'])
+    flag = False
+    healthy_ref_hist = np.empty((0, 256), np.int)
+    healthy_ref_freq = np.empty((0, 256), np.int)
+    healthy_idx = [0]
+    tumor_ref_hist = np.empty((0, 256), np.int)
+    tumor_ref_freq = np.empty((0, 256), np.int)
+    tumor_idx = [0]
+    path_list = []
+    import pathlib
+    for index, fpath in enumerate(files_path):
+        logger.debug(f'File path: {fpath}')
+        path_list.append(pathlib.Path(fpath))
+        hist = pd.read_csv(fpath, header=None).values
+        if clean:
+            hist, hist_freq = rm_noise_frame(hist)
+        if '/0/' in fpath:
+            if flag:
+                hellinger_HH = histogram_distance(
+                    healthy_ref_hist, healthy_ref_freq, healthy_idx)
+                hellinger_HT = histogram_distance(
+                    healthy_ref_hist, tumor_ref_freq, tumor_idx)
+
+                histogram_multplot(
+                    healthy_ref_freq, path_list[ant_idx:index], healthy_idx)
+                histogram_multplot(
+                    tumor_ref_freq, path_list[(ant_idx+len(healthy_idx)-1):index], tumor_idx)
+
+                flag = False
+                healthy_ref_hist = np.empty((0, 256), np.int)
+                healthy_ref_freq = np.empty((0, 256), np.int)
+                healthy_idx = [0]
+                tumor_ref_hist = np.empty((0, 256), np.int)
+                tumor_ref_freq = np.empty((0, 256), np.int)
+                tumor_idx = [0]
+            healthy_ref_hist = np.append(healthy_ref_hist, hist, axis=0)
+            healthy_ref_freq = np.append(healthy_ref_hist, hist_freq, axis=0)
+            healthy_idx.append(healthy_idx[-1]+len(hist))
+            ant_idx = index
+        else:
+            flag = True
+            tumor_ref_hist = np.append(tumor_ref_hist, hist, axis=0)
+            tumor_ref_freq = np.append(tumor_ref_hist, hist_freq, axis=0)
+            tumor_idx.append(tumor_idx[-1]+len(hist))
+
+    histogram_multplot(
+        healthy_ref_freq, path_list[ant_idx:index], healthy_idx)
+    histogram_multplot(
+        tumor_ref_freq, path_list[(ant_idx+len(healthy_idx)-1):index+1], tumor_idx)
+
+    return 0
+
+
+def full_hist_analysisOLD(source):
     import subprocess
     output = subprocess.run(f'find {source} -type f -name "*-frame-histogram.csv"', shell=True,  stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, universal_newlines=True)
@@ -81,7 +276,7 @@ def full_hist_analysis(source):
         hist_freq = hist / np.sum(hist)
         hellinger_global.append(hellinger_distance(glob_norm_freq, hist_freq))
     norm_threshold = np.mean(hellinger_global) + np.std(hellinger_global)
-    logger.debug(f'Nomral Hellinger - Threshold: {norm_threshold:.2f} '
+    logger.debug(f'Normal Hellinger - Threshold: {norm_threshold:.2f} '
                  f'| Mean: {np.mean(hellinger_global):.2f} | '
                  f'STD:{np.std(hellinger_global):.2f}')
 
@@ -96,19 +291,216 @@ def full_hist_analysis(source):
         barplot_hist_T.extend(
             np.repeat(pix, int(global_tumor_mean[pix])).tolist())
 
+    logger.debug(f'Normal - Mean: {np.mean(barplot_hist_N):.2f}, STD: {np.std(barplot_hist_N):.2f}, '
+                 f' Median: {np.median(barplot_hist_N):.2f}, Mode: {ext_mode(barplot_hist_N)[0]:.2f}')
+    logger.debug(f'Tumor - Mean: {np.mean(barplot_hist_T):.2f}, STD: {np.std(barplot_hist_T):.2f}, '
+                 f' Median: {np.median(barplot_hist_T):.2f}, Mode: {ext_mode(barplot_hist_T)[0]:.2f}')
+
     plot_style()
     _, ax = plt.subplots(1)
     # plt.plot(glob_norm_freq)
-    plt.hist(barplot_hist_N, bins=255)
+    density = ax.hist(barplot_hist_N, density=True,
+                      bins=255, alpha=.85, label='Tumor')[0]
+    ax.set(title='Normal frames', ylabel="Relative frequency", xlabel='Pixel intensity', xticks=np.arange(0, 255, 50),
+           yticks=ticks_interval(density, 6, 3))
+    # plt.hist(barplot_hist_N, bins=255, density=True)
+    # plt.xlabel('Pixel intensity')
+    # plt.ylabel('Frequency')
+    # plt.title(r'Normal frames pixel distribuion')
+    plot = ax.get_figure()
+    plot.canvas.draw()
+    for index, label in enumerate(ax.get_yticklabels()):
+        if index % 2 == 1:
+            label.set_visible(True)
+        else:
+            label.set_visible(False)
     plt.savefig('glob_norm_hist.png', dpi=600, bbox_inches="tight")
     plt.clf()
+    plot_style()
+    _, ax = plt.subplots(1)
+    density = ax.hist(barplot_hist_T, density=True,
+                      bins=255, alpha=.85, label='Tumor')[0]
+    ax.set(title='Tumor frames', ylabel="Relative frequency", xlabel='Pixel intensity', xticks=np.arange(0, 255, 50),
+           yticks=ticks_interval(density, 6, 3))
+    # plt.hist(barplot_hist_N, bins=255, density=True)
+    # plt.xlabel('Pixel intensity')
+    # plt.ylabel('Frequency')
+    # plt.title(r'Normal frames pixel distribuion')
+    plot = ax.get_figure()
+    plot.canvas.draw()
+    for index, label in enumerate(ax.get_yticklabels()):
+        if index % 2 == 1:
+            label.set_visible(True)
+        else:
+            label.set_visible(False)
     # plt.plot(glob_tumor_freq)
-    plt.hist(barplot_hist_T, bins=255)
+    # plt.hist(barplot_hist_T, bins=255, density=True)
+    # plt.xlabel('Pixel intensity')
+    # plt.ylabel('Frequency')
+    # plt.title(r'Tumor frames pixel distribuion')
     plt.savefig('glob_tumor_hist.png', dpi=600, bbox_inches="tight")
     plt.clf()
+    logger.debug(
+        f'Hellinger: {hellinger_distance(glob_norm_freq, glob_tumor_freq):.3f}')
+    # exit()
+
     import pathlib as pl
-    for fpath in files:
+    list_hell_NN = []
+    for fpath in files[73:74]:
         frames_hist = pd.read_csv(fpath, header=None)
+        count = 0
+        for index, hist in frames_hist.iterrows():
+            hist_freq = hist / np.sum(hist)
+            dist_hell_N = hellinger_distance(glob_norm_freq, hist_freq)
+            dist_hell_T = hellinger_distance(glob_tumor_freq, hist_freq)
+            if dist_hell_N > norm_threshold:
+                count += 1
+                # frames_list.append(index)
+            list_hell_NN.append(dist_hell_N)
+            # list_hell_NN.append(dist_hell_T)
+        logger.debug(
+            f'Range: {np.min(list_hell_NN):.3f}..{np.max(list_hell_NN):.3f}')
+        path = pl.Path(fpath)
+        #
+        frames_mean_hist_Y = np.mean(frames_hist, axis=0)
+        barplot_hist_Y = []
+        for pix in range(256):
+            barplot_hist_Y.extend(
+                np.repeat(pix, int(frames_mean_hist_Y[pix])).tolist())
+        plot_style()
+        _, ax = plt.subplots(1)
+        density = ax.hist(barplot_hist_Y, density=True,
+                          bins=255, alpha=.85, label='Tumor')[0]
+        ax.set(title='Normal video', ylabel="Relative frequency", xlabel='Pixel intensity', xticks=np.arange(0, 255, 50),
+               yticks=ticks_interval(density, 6, 3))
+        plot = ax.get_figure()
+        plot.canvas.draw()
+        for index, label in enumerate(ax.get_yticklabels()):
+            if index % 2 == 1:
+                label.set_visible(True)
+            else:
+                label.set_visible(False)
+        plt.savefig(f'{path.stem}.png', dpi=600, bbox_inches="tight")
+        plt.clf()
+        if True:
+            continue
+
+    tumor_videos = []
+    frames_hist_TT = []
+    list_hell_TT = []
+    cont = 0
+    for fpath in files[74:76]:
+        cont += 1
+        frames_hist = pd.read_csv(fpath, header=None)
+        path = pl.Path(fpath)
+        #
+        frames_mean_hist = np.mean(frames_hist)
+        count = 0
+        for index, hist in frames_hist.iterrows():
+            hist_freq = hist / np.sum(hist)
+            dist_hell_N = hellinger_distance(glob_norm_freq, hist_freq)
+            dist_hell_T = hellinger_distance(glob_tumor_freq, hist_freq)
+            if dist_hell_N > norm_threshold:
+                count += 1
+                # frames_list.append(index)
+            list_hell_TT.append(dist_hell_N)
+            # list_hell_TT.append(dist_hell_T)
+
+        frames_hist_TT.append(frames_mean_hist)
+        barplot_hist_X = []
+        for pix in range(256):
+            barplot_hist_X.extend(
+                np.repeat(pix, int(frames_mean_hist[pix])).tolist())
+        tumor_videos.extend(barplot_hist_X)
+        plot_style()
+        _, ax = plt.subplots(1)
+        density = ax.hist(barplot_hist_X, density=True,
+                          bins=255, alpha=.85, label='Tumor')[0]
+        ax.set(title='Tumor video', ylabel="Density", xlabel='Pixel intensity', xticks=np.arange(0, 255, 50),
+               yticks=ticks_interval(density, 6, 3))
+        plot = ax.get_figure()
+        plot.canvas.draw()
+        for index, label in enumerate(ax.get_yticklabels()):
+            if index % 2 == 1:
+                label.set_visible(True)
+            else:
+                label.set_visible(False)
+        plt.savefig(f'{path.stem}-tumor.png', dpi=600, bbox_inches="tight")
+        plt.clf()
+        if True:
+            if cont > 1:
+                plot_style()
+                _, ax = plt.subplots(1)
+                density = ax.hist(barplot_hist_X, density=True,
+                                  bins=255, alpha=.85, label='Tumor')[0]
+                ax.set(title='Tumor videos', ylabel="Relative frequency", xlabel='Pixel intensity', xticks=np.arange(0, 255, 50),
+                       yticks=ticks_interval(density, 6, 3))
+                plot = ax.get_figure()
+                plot.canvas.draw()
+                for index, label in enumerate(ax.get_yticklabels()):
+                    if index % 2 == 1:
+                        label.set_visible(True)
+                    else:
+                        label.set_visible(False)
+                plt.savefig('tumor-video.png', dpi=600, bbox_inches="tight")
+                plt.clf()
+                meanTT = np.mean(frames_hist_TT, axis=0)
+                freq_TT = meanTT / np.sum(meanTT)
+                freq_Y = frames_mean_hist_Y / np.sum(frames_mean_hist_Y)
+
+                logger.debug(
+                    f'Hellinger N-T: {hellinger_distance(freq_Y, freq_TT):.2f}')
+                # # list_hell_T = []
+                # for index, hist in frames_hist.iterrows():
+                #     hist_freq = hist / np.sum(hist)
+                #     dist_hell_N = hellinger_distance(glob_norm_freq, hist_freq)
+                #     dist_hell_T = hellinger_distance(glob_tumor_freq, hist_freq)
+                #     if dist_hell_N > norm_threshold:
+                #         count += 1
+                #         # frames_list.append(index)
+                #     # list_hell_N.append(dist_hell_N)
+                #     list_hell_T.append(dist_hell_TT)
+
+                densities_list = []
+                aux_list = list_hell_NN.copy()
+                aux_list.extend(list_hell_TT)
+                plot_style()
+                _, ax = plt.subplots(1)
+                # data_ticks = np.vstack([list_hell_NN, list_hell_TT])
+                data_ticks = aux_list
+                x_ticks = ticks_interval(data_ticks, 5, 2)
+                logger.debug(
+                    f'N-Range: {np.min(list_hell_NN):.3f}..{np.max(list_hell_NN):.3f}')
+                logger.debug(
+                    f'T-Range: {np.min(list_hell_TT):.3f}..{np.max(list_hell_TT):.3f}')
+                densities_list.append(ax.hist(list_hell_NN, density=True,
+                                              bins=x_ticks, alpha=.85, label='Normal')[0])
+                densities_list.append(ax.hist(list_hell_TT, density=True,
+                                              bins=x_ticks, alpha=.85, label='Tumor')[0])
+                ax.set(title='Hellinger distance distribution', ylabel="Density", xlabel='Hellinger distance', xticks=x_ticks,
+                       yticks=ticks_interval(densities_list, 6, 1))
+                plt.legend(loc='upper right', prop={'size': 12})
+                plot = ax.get_figure()
+                plot.canvas.draw()
+                for index, label in enumerate(ax.get_yticklabels()):
+                    if index % 2 == 1:
+                        label.set_visible(True)
+                    else:
+                        label.set_visible(False)
+                plt.savefig(
+                    'N-T-helling_dist.png', dpi=600, bbox_inches="tight")
+                entropy, max_entropy, degree_disorder = shannon_entropy(
+                    densities_list[0], x_ticks)
+
+                logger.debug(
+                    f'Shannon Normal - E:{entropy:.2f}/{max_entropy:.2f} DD:{degree_disorder:.2f}')
+
+                entropy, max_entropy, degree_disorder = shannon_entropy(
+                    densities_list[1], x_ticks)
+                logger.debug(
+                    f'Shannon Tumor - E:{entropy:.2f}/{max_entropy:.2f} DD:{degree_disorder:.2f}')
+            continue
+        #
         list_hell_N = []
         list_hell_T = []
         count = 0
@@ -124,7 +516,6 @@ def full_hist_analysis(source):
             list_hell_N.append(dist_hell_N)
             list_hell_T.append(dist_hell_T)
 
-        path = pl.Path(fpath)
         densities_list = []
         plot_style()
         _, ax = plt.subplots(1)
@@ -198,7 +589,7 @@ def histogram_analysis(data):
         if dist_hell > 0.3:
             count += 1
         entropy, max_entropy, degree_disorder = shannon_entropy(hist_freq, [
-                                                                0, 1, 255])
+            0, 1, 255])
         list_hell.append(dist_hell)
         logger.debug(
             f'Frame: {index:4d} | H: {dist_hell:.3f} | S: {entropy:.3f}/{max_entropy:.3f}')
@@ -841,20 +1232,20 @@ def box_plot(data, ticks_number=7, decimals=2):
 
 def ticks_interval(data, quantity, decimals, pct=False):
     start_time = timer()
-    logger.debug('Initializing ticks interval')
+    # logger.debug('Initializing ticks interval')
     # max_value = max(map(max, data))
     max_value = np.max(data)
     # min_value = min(map(min, data))
     min_value = np.min(data)
 
     interval = np.round((max_value - min_value) / quantity, decimals)
-    logger.debug(f'Min value: {min_value:.5f} | Max value: {max_value:.5f} | '
-                 f'No. ticks: {quantity} | Decimal places: {decimals} | '
-                 f'Interval: {interval:.5f}')
+    # logger.debug(f'Min value: {min_value:.5f} | Max value: {max_value:.5f} | '
+    #              f'No. ticks: {quantity} | Decimal places: {decimals} | '
+    #              f'Interval: {interval:.5f}')
 
     ticks = np.round(np.arange(min_value, max_value +
                                interval, interval), decimals)
-    logger.debug('Pre-ticks: ' + str([f'{value:.5f}' for value in ticks]))
+    # logger.debug('Pre-ticks: ' + str([f'{value:.5f}' for value in ticks]))
 
     if pct and max(ticks) > 100:
         min_tick = min(min(ticks), 100-interval*(quantity+1))
@@ -871,10 +1262,10 @@ def ticks_interval(data, quantity, decimals, pct=False):
             ticks = np.round(np.arange(0, max_value +
                                        interval, interval), decimals)
     logger.debug('Ticks: ' + str([f'{value:.5f}' for value in ticks]))
-    logger.debug('Finished ticks interval')
+    # logger.debug('Finished ticks interval')
     end_time = timer()
-    logger.debug(
-        f'Ticks interval function time elapsed: {end_time-start_time:.2f}s')
+    # logger.debug(
+    #     f'Ticks interval function time elapsed: {end_time-start_time:.2f}s')
     return ticks
 
 
