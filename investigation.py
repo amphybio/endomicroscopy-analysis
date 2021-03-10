@@ -89,41 +89,40 @@ def rm_noise_frame(histogram, frame_threshold=75, light_max_freq=0.95, dark_max_
             logger.debug(
                 f'Dark frame noise - idx {index}, freq: {np.sum(hist_freq[:frame_threshold]):.3f}')
         else:
-            # frame_freq_hist = np.append(frame_freq_hist, hist_freq, axis=0)
             frame_freq_hist = np.vstack([frame_freq_hist, hist_freq])
     clean_histogram = np.delete(histogram, rm_list, axis=0)
     logger.info(f'No. frames removed: {len(rm_list)}. List: {rm_list}')
     return clean_histogram, frame_freq_hist
 
 
-def histogram_distance(ref_histogram, hist_freq_frames, video_interval):
+def histogram_distance(ref_histogram, hist_freq_frames, video_interval, path):
     mean_hist = ref_histogram.mean(axis=0)
-    # histogram_plot(mean_hist, ???)
+    histogram_plot(mean_hist, path, 'Healthy')
     ref_hist_freq = mean_hist / np.sum(mean_hist)
     hellinger_list = []
     for idx in range(len(video_interval)-1):
         distances = []
+        logger.debug(
+            f'HD-Idx {idx}: interval[{video_interval[idx]},{video_interval[idx+1]}]')
         for hist in hist_freq_frames[video_interval[idx]:video_interval[idx+1]]:
             dist = hellinger_distance(hist, ref_hist_freq)
             distances.append(dist)
         hellinger_list.append(distances)
-    return hellinger_list
+    return np.array([np.array(dist_list) for dist_list in hellinger_list])
 
 
-def distance_distribution_plot(first_distribution, second_distribution):
-    densities_list = []
-    aux_list = first_distribution.copy()
-    aux_list.extend(second_distribution)
-    plot_style()
-    _, ax = plt.subplots(1)
-    data_ticks = aux_list
-    x_ticks = ticks_interval(data_ticks, 5, 2)
+def distance_distribution_plot(first_distribution, second_distribution, path, name='HT-hellinger-distibution'):
+    aux_list = np.hstack([first_distribution, second_distribution])
+    x_ticks = ticks_interval(aux_list, 5, 2)
     logger.debug(
         f'N-Range: {np.min(first_distribution):.3f}..{np.max(first_distribution):.3f}')
     logger.debug(
         f'T-Range: {np.min(second_distribution):.3f}..{np.max(second_distribution):.3f}')
+    plot_style()
+    _, ax = plt.subplots(1)
+    densities_list = []
     densities_list.append(ax.hist(first_distribution, density=True,
-                                  bins=x_ticks, alpha=.85, label='Normal')[0])
+                                  bins=x_ticks, alpha=.85, label='Healthy')[0])
     densities_list.append(ax.hist(second_distribution, density=True,
                                   bins=x_ticks, alpha=.85, label='Tumor')[0])
     ax.set(title='Hellinger distance distribution', ylabel="Density", xlabel='Hellinger distance', xticks=x_ticks,
@@ -136,8 +135,7 @@ def distance_distribution_plot(first_distribution, second_distribution):
             label.set_visible(True)
         else:
             label.set_visible(False)
-    plt.savefig(
-        'N-T-helling_dist.png', dpi=600, bbox_inches="tight")
+    plt.savefig(f'{path}/{name}.png', dpi=600, bbox_inches="tight")
     entropy, max_entropy, degree_disorder = shannon_entropy(
         densities_list[0], x_ticks)
 
@@ -151,15 +149,15 @@ def distance_distribution_plot(first_distribution, second_distribution):
     return 0
 
 
-def histogram_plot(histogram, path):
+def histogram_plot(histogram, path, name):
     barplot = []
     for intensity in range(256):
         barplot.extend(
-            np.repeat(intensity, histogram[intensity]))
+            np.repeat(intensity, int(histogram[intensity])))
     plot_style()
     _, ax = plt.subplots(1)
     density = ax.hist(barplot, density=True, bins=256, alpha=.85)[0]
-    ax.set(title=f'Intensity histogram video', ylabel="Relative frequency", xlabel='Pixel intensity', xticks=np.arange(0, 255, 50),
+    ax.set(title=f'Intensity histogram', ylabel="Relative frequency", xlabel='Pixel intensity', xticks=np.arange(0, 255, 50),
            yticks=ticks_interval(density, 6, 3))
     plot = ax.get_figure()
     plot.canvas.draw()
@@ -168,7 +166,7 @@ def histogram_plot(histogram, path):
             label.set_visible(True)
         else:
             label.set_visible(False)
-    plt.savefig(f'{path.parents[0]}/{path.stem}.png',
+    plt.savefig(f'{path}/{name}.png',
                 dpi=600, bbox_inches="tight")
     plt.clf()
 
@@ -186,43 +184,51 @@ def build_ref_mean(histogram, video_intervals):
 
 def histogram_multplot(histogram, path_list, histogram_index):
     mean_histograms = build_ref_mean(histogram, histogram_index)
-    logger.debug(
-        f'Mean: {mean_histograms.ndim} {mean_histograms.shape}, Paths: {path_list}')
-    if mean_histograms.ndim < 2:
-        histogram_plot(mean_histograms, path_list[0])
-    else:
-        for idx, hist in enumerate(mean_histograms):
-            histogram_plot(hist, path_list[idx])
+    for idx, hist in enumerate(mean_histograms):
+        histogram_plot(hist, path_list[idx].parents[0], path_list[idx].stem)
 
 
 def full_hist_analysis(source, clean=True):
+    start_time = timer()
     files_path = find_files(source, ['-frame-histogram.csv'])
     flag = False
     healthy_ref_hist = np.empty((0, 256), np.int)
-    healthy_ref_freq = np.empty((0, 256), np.int)
+    healthy_ref_freq = np.empty((0, 256), np.float)
     healthy_idx = [0]
     tumor_ref_hist = np.empty((0, 256), np.int)
-    tumor_ref_freq = np.empty((0, 256), np.int)
+    tumor_ref_freq = np.empty((0, 256), np.float)
     tumor_idx = [0]
     path_list = []
     import pathlib
     for index, fpath in enumerate(files_path):
         logger.debug(f'File path: {fpath}')
+        logger.debug(f'Healthy: {healthy_ref_hist.shape}')
         path_list.append(pathlib.Path(fpath))
         hist = pd.read_csv(fpath, header=None).values
         if clean:
             hist, hist_freq = rm_noise_frame(hist)
+        else:
+            hist_freq = np.empty((0, 256), np.float)
+            for hist_frame in hist:
+                hist_frame_freq = hist_frame / np.sum(hist_frame)
+                hist_freq = np.vstack([hist_freq, hist_frame_freq])
         if '/0/' in fpath:
             if flag:
+                plot_path = path_list[ant_idx].parents[2]
                 hellinger_HH = histogram_distance(
-                    healthy_ref_hist, healthy_ref_freq, healthy_idx)
+                    healthy_ref_hist, healthy_ref_freq, healthy_idx, plot_path)
                 hellinger_HT = histogram_distance(
-                    healthy_ref_hist, tumor_ref_freq, tumor_idx)
+                    healthy_ref_hist, tumor_ref_freq, tumor_idx, plot_path)
+                distance_distribution_plot(
+                    np.hstack(hellinger_HH), np.hstack(hellinger_HT), plot_path)
 
                 histogram_multplot(
-                    healthy_ref_freq, path_list[ant_idx:index], healthy_idx)
+                    healthy_ref_hist, path_list[ant_idx:ant_idx+len(healthy_idx)-1], healthy_idx)
                 histogram_multplot(
-                    tumor_ref_freq, path_list[(ant_idx+len(healthy_idx)-1):index], tumor_idx)
+                    tumor_ref_hist, path_list[(ant_idx+len(healthy_idx)-1):index], tumor_idx)
+
+                mean_tumor_hist = tumor_ref_hist.mean(axis=0)
+                histogram_plot(mean_tumor_hist, plot_path, 'Tumor')
 
                 flag = False
                 healthy_ref_hist = np.empty((0, 256), np.int)
@@ -231,21 +237,31 @@ def full_hist_analysis(source, clean=True):
                 tumor_ref_hist = np.empty((0, 256), np.int)
                 tumor_ref_freq = np.empty((0, 256), np.int)
                 tumor_idx = [0]
-            healthy_ref_hist = np.append(healthy_ref_hist, hist, axis=0)
-            healthy_ref_freq = np.append(healthy_ref_hist, hist_freq, axis=0)
+            healthy_ref_hist = np.vstack([healthy_ref_hist, hist])
+            healthy_ref_freq = np.vstack([healthy_ref_freq, hist_freq])
             healthy_idx.append(healthy_idx[-1]+len(hist))
             ant_idx = index
         else:
             flag = True
-            tumor_ref_hist = np.append(tumor_ref_hist, hist, axis=0)
-            tumor_ref_freq = np.append(tumor_ref_hist, hist_freq, axis=0)
+            tumor_ref_hist = np.vstack([tumor_ref_hist, hist])
+            tumor_ref_freq = np.vstack([tumor_ref_freq, hist_freq])
             tumor_idx.append(tumor_idx[-1]+len(hist))
 
-    histogram_multplot(
-        healthy_ref_freq, path_list[ant_idx:index], healthy_idx)
-    histogram_multplot(
-        tumor_ref_freq, path_list[(ant_idx+len(healthy_idx)-1):index+1], tumor_idx)
+    plot_path = path_list[ant_idx].parents[2]
+    hellinger_HH = histogram_distance(
+        healthy_ref_hist, healthy_ref_freq, healthy_idx, plot_path)
+    hellinger_HT = histogram_distance(
+        healthy_ref_hist, tumor_ref_freq, tumor_idx, plot_path)
+    distance_distribution_plot(
+        np.hstack(hellinger_HH), np.hstack(hellinger_HT), plot_path)
+    histogram_multplot(healthy_ref_hist, path_list[ant_idx:index], healthy_idx)
+    histogram_multplot(tumor_ref_hist, path_list[(
+        ant_idx+len(healthy_idx)-1):index+1], tumor_idx)
+    mean_tumor_hist = tumor_ref_hist.mean(axis=0)
+    histogram_plot(mean_tumor_hist, plot_path, 'Tumor')
 
+    end_time = timer()
+    logger.debug(f'Time elpased: {end_time-start_time:.2f}')
     return 0
 
 
