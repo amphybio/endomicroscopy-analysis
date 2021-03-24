@@ -44,6 +44,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import logendo as le
 from timeit import default_timer as timer
+import sys
 
 
 def plot_style():
@@ -87,12 +88,13 @@ def rm_noise_frame(histogram, frame_threshold=75, light_max_freq=0.95, dark_max_
         elif np.sum(hist_freq[:frame_threshold]) > dark_max_freq:
             rm_list.append(index)
             logger.debug(
-                f'Dark frame noise - idx {index}, freq: {np.sum(hist_freq[:frame_threshold]):.3f}')
+                f'Dark frame noise - idx {index}, freq: {np.sum(hist_freq[frame_threshold]):.3f}')
         else:
             frame_freq_hist = np.vstack([frame_freq_hist, hist_freq])
     clean_histogram = np.delete(histogram, rm_list, axis=0)
     logger.info(f'No. frames removed: {len(rm_list)}. List: {rm_list}')
     return clean_histogram, frame_freq_hist
+    logger.debug('\n\n >>>> 01 \n\n')
 
 
 def histogram_distance(ref_histogram, hist_freq_frames, video_interval, path):
@@ -188,75 +190,168 @@ def histogram_multplot(histogram, path_list, histogram_index):
         histogram_plot(hist, path_list[idx].parents[0], path_list[idx].stem)
 
 
+def fractal_distribution_plot(first_distribution, second_distribution, path, name='HT-fractal-distibution'):
+    logger.debug('Initialize fractal')
+    logger.debug(
+        f'(0) H-Range: {np.min(first_distribution):.3f}..{np.max(first_distribution):.3f}')
+    logger.debug(
+        f'(0) T-Range: {np.min(second_distribution):.3f}..{np.max(second_distribution):.3f}')
+    first_distribution = first_distribution[first_distribution >= 1.0]
+    second_distribution = second_distribution[second_distribution >= 1.0]
+    logger.debug(
+        f'(1) H-Range: {np.min(first_distribution):.3f}..{np.max(first_distribution):.3f}')
+    logger.debug(
+        f'(1) T-Range: {np.min(second_distribution):.3f}..{np.max(second_distribution):.3f}')
+
+    aux_list = np.hstack([first_distribution, second_distribution])
+    x_ticks = ticks_interval(aux_list, 5, 2)
+    logger.debug(
+        f'Range - aux_list: {np.min(aux_list):.3f}..{np.max(aux_list):.3f}, x_ticks: {np.min(x_ticks):.2f}..{np.max(x_ticks):.2f} ')
+    plot_style()
+    _, ax = plt.subplots(1)
+    densities_list = []
+    densities_list.append(ax.hist(first_distribution, density=True,
+                                  bins=x_ticks, alpha=.85, label='Healthy')[0])
+    logger.debug(
+        f'(0) Densities: {len(densities_list)} : {len(densities_list[0])}')
+    densities_list.append(ax.hist(second_distribution, density=True,
+                                  bins=x_ticks, alpha=.85, label='Tumor')[0])
+    logger.debug(
+        f'(1) Densities: {len(densities_list)} : {len(densities_list[1])}')
+    ax.set(title='Fractal dimension distribution', ylabel="Density", xlabel='Fractal dimension', xticks=x_ticks,
+           yticks=ticks_interval(densities_list, 6, 2))
+    ax.set_xticklabels(np.round(x_ticks, 2), size=16)
+    plt.legend(loc='upper right', prop={'size': 12})
+    plot = ax.get_figure()
+    plot.canvas.draw()
+    for index, label in enumerate(ax.get_yticklabels()):
+        if index % 2 == 1:
+            label.set_visible(True)
+        else:
+            label.set_visible(False)
+    plt.savefig(f'{path}/{name}.png', dpi=600, bbox_inches="tight")
+    entropy, max_entropy, degree_disorder = shannon_entropy(
+        densities_list[0], x_ticks)
+
+    logger.debug(
+        f'Shannon Healthy - E:{entropy:.2f}/{max_entropy:.2f} DD:{degree_disorder:.2f}')
+
+    entropy, max_entropy, degree_disorder = shannon_entropy(
+        densities_list[1], x_ticks)
+    logger.debug(
+        f'Shannon Tumor - E:{entropy:.2f}/{max_entropy:.2f} DD:{degree_disorder:.2f}')
+    return 0
+
+
 def full_hist_analysis(source, clean=True):
     start_time = timer()
     files_path = find_files(source, ['-frame-histogram.csv'])
+    files_frac = find_files(source, ['-fractal-dimension.csv'])
     flag = False
-    healthy_ref_hist = np.empty((0, 256), np.int)
-    healthy_ref_freq = np.empty((0, 256), np.float)
+    prev_idx = None
+    # Trocar o hstack por assinatura direta. Criar array vazio com tamanho
+    # size(len(files_path), 256) e substituir o hstack por estrutura[i] = novo
+    # algo nessa linha. Pode reduzir tempo de execução
+    healthy_ref_hist = np.empty((0, 256), np.int32)
+    healthy_ref_freq = np.empty((0, 256), np.float32)
+    healthy_fractal = []
     healthy_idx = [0]
-    tumor_ref_hist = np.empty((0, 256), np.int)
-    tumor_ref_freq = np.empty((0, 256), np.float)
+    tumor_ref_hist = np.empty((0, 256), np.int32)
+    tumor_ref_freq = np.empty((0, 256), np.float32)
+    tumor_fractal = []
     tumor_idx = [0]
     path_list = []
     import pathlib
-    for index, fpath in enumerate(files_path):
-        logger.debug(f'File path: {fpath}')
-        logger.debug(f'Healthy: {healthy_ref_hist.shape}')
+    for index, (fpath, ffrac) in enumerate(zip(files_path, files_frac)):
+        logger.debug(f'Histogram file path: {fpath}. Fractal file: {ffrac}')
         path_list.append(pathlib.Path(fpath))
         hist = pd.read_csv(fpath, header=None).values
+        frac = pd.read_csv(ffrac, header=None).values
+        frac = frac[~np.isnan(frac)]
         if clean:
             hist, hist_freq = rm_noise_frame(hist)
         else:
-            hist_freq = np.empty((0, 256), np.float)
+            hist_freq = np.empty((0, 256), np.float32)
             for hist_frame in hist:
                 hist_frame_freq = hist_frame / np.sum(hist_frame)
                 hist_freq = np.vstack([hist_freq, hist_frame_freq])
+
         if '/0/' in fpath:
             if flag:
-                plot_path = path_list[ant_idx].parents[2]
+                plot_path = path_list[prev_idx].parents[2]
                 hellinger_HH = histogram_distance(
                     healthy_ref_hist, healthy_ref_freq, healthy_idx, plot_path)
                 hellinger_HT = histogram_distance(
                     healthy_ref_hist, tumor_ref_freq, tumor_idx, plot_path)
+
+                for idx, hellinger_distr in enumerate(hellinger_HT):
+                    distance_distribution_plot(
+                        np.hstack(hellinger_HH), np.hstack(
+                            hellinger_distr), plot_path,
+                        f'{idx}-hellinger-distribution')
+
                 distance_distribution_plot(
                     np.hstack(hellinger_HH), np.hstack(hellinger_HT), plot_path)
 
-                histogram_multplot(
-                    healthy_ref_hist, path_list[ant_idx:ant_idx+len(healthy_idx)-1], healthy_idx)
-                histogram_multplot(
-                    tumor_ref_hist, path_list[(ant_idx+len(healthy_idx)-1):index], tumor_idx)
+                for idx, fd_list in enumerate(tumor_fractal):
+                    fractal_distribution_plot(np.hstack(healthy_fractal),
+                                              np.asarray(fd_list), plot_path,
+                                              f'{idx}-fd-distribution')
+
+                fractal_distribution_plot(np.hstack(healthy_fractal),
+                                          np.hstack(tumor_fractal), plot_path)
+
+                histogram_multplot(healthy_ref_hist,
+                                   path_list[prev_idx:(prev_idx+len(healthy_idx)-1)], healthy_idx)
+                histogram_multplot(tumor_ref_hist,
+                                   path_list[(prev_idx+len(healthy_idx)-1):index], tumor_idx)
 
                 mean_tumor_hist = tumor_ref_hist.mean(axis=0)
                 histogram_plot(mean_tumor_hist, plot_path, 'Tumor')
 
                 flag = False
-                healthy_ref_hist = np.empty((0, 256), np.int)
-                healthy_ref_freq = np.empty((0, 256), np.int)
+                healthy_ref_hist = np.empty((0, 256), np.int32)
+                healthy_ref_freq = np.empty((0, 256), np.float32)
+                healthy_fractal = []
                 healthy_idx = [0]
-                tumor_ref_hist = np.empty((0, 256), np.int)
-                tumor_ref_freq = np.empty((0, 256), np.int)
+                tumor_ref_hist = np.empty((0, 256), np.int32)
+                tumor_ref_freq = np.empty((0, 256), np.float32)
+                tumor_fractal = []
                 tumor_idx = [0]
             healthy_ref_hist = np.vstack([healthy_ref_hist, hist])
             healthy_ref_freq = np.vstack([healthy_ref_freq, hist_freq])
             healthy_idx.append(healthy_idx[-1]+len(hist))
-            ant_idx = index
-        else:
+            # healthy_fractal.extend(frac)
+            healthy_fractal.append(frac)
+            prev_idx = index
+        elif '/1/' in fpath:
             flag = True
             tumor_ref_hist = np.vstack([tumor_ref_hist, hist])
             tumor_ref_freq = np.vstack([tumor_ref_freq, hist_freq])
             tumor_idx.append(tumor_idx[-1]+len(hist))
+            # tumor_fractal.extend(frac)
+            tumor_fractal.append(frac)
+        else:
+            logger.error('Wrong structure! Exiting...')
+            sys.exit()
 
-    plot_path = path_list[ant_idx].parents[2]
+    plot_path = path_list[prev_idx].parents[2]
     hellinger_HH = histogram_distance(
         healthy_ref_hist, healthy_ref_freq, healthy_idx, plot_path)
     hellinger_HT = histogram_distance(
         healthy_ref_hist, tumor_ref_freq, tumor_idx, plot_path)
     distance_distribution_plot(
         np.hstack(hellinger_HH), np.hstack(hellinger_HT), plot_path)
-    histogram_multplot(healthy_ref_hist, path_list[ant_idx:index], healthy_idx)
+    for idx, fd_list in enumerate(tumor_fractal):
+        fractal_distribution_plot(np.hstack(healthy_fractal),
+                                  np.asarray(fd_list), plot_path,
+                                  f'{idx}-fd-distribution')
+    fractal_distribution_plot(
+        np.hstack(healthy_fractal), np.hstack(tumor_fractal), plot_path)
+    histogram_multplot(
+        healthy_ref_hist, path_list[prev_idx:index], healthy_idx)
     histogram_multplot(tumor_ref_hist, path_list[(
-        ant_idx+len(healthy_idx)-1):index+1], tumor_idx)
+        prev_idx+len(healthy_idx)-1):index+1], tumor_idx)
     mean_tumor_hist = tumor_ref_hist.mean(axis=0)
     histogram_plot(mean_tumor_hist, plot_path, 'Tumor')
 
@@ -1255,9 +1350,9 @@ def ticks_interval(data, quantity, decimals, pct=False):
     min_value = np.min(data)
 
     interval = np.round((max_value - min_value) / quantity, decimals)
-    # logger.debug(f'Min value: {min_value:.5f} | Max value: {max_value:.5f} | '
-    #              f'No. ticks: {quantity} | Decimal places: {decimals} | '
-    #              f'Interval: {interval:.5f}')
+    logger.debug(f'Min value: {min_value:.5f} | Max value: {max_value:.5f} | '
+                 f'No. ticks: {quantity} | Decimal places: {decimals} | '
+                 f'Interval: {interval:.5f}')
 
     ticks = np.round(np.arange(min_value, max_value +
                                interval, interval), decimals)
@@ -1418,6 +1513,7 @@ def main():
     else:
         logger.error(
             f'The path "{source}" is not a valid source! Exiting...')
+        sys.exit()
 
 
 if __name__ == "__main__":

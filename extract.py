@@ -113,11 +113,13 @@ def zip_move(path, dest_path):
     logger.debug(f'Zip-Move function time elapsed: {end_time-start_time:.2f}s')
     return key_sand
 
+
 def frame_analysis(source, extension=['*.mp4', '*.mpeg'], ftype=0):
     # ftype: (0) Video; (other) Image
     start_time = timer()
     logger.info('Initializing frame analysis')
-    logger.debug(f'Parameters - source: {source} | ext: {extension} | ftype: {int(ftype)}')
+    logger.debug(
+        f'Parameters - source: {source} | ext: {extension} | ftype: {int(ftype)}')
     cmd = f'find {source} -type f -name "{extension[0]}"'
     for ext in extension[1:]:
         cmd += f' -o -name "{ext}"'
@@ -136,21 +138,28 @@ def frame_analysis(source, extension=['*.mp4', '*.mpeg'], ftype=0):
             path = pathlib.Path(video_source)
             dir_structure(path, ['frame'])
             sub_dir = path.parents[0] / 'frame' / path.stem
-            source_hist = video_frame(video_source, sub_dir)[:,:,0]
+            source_hist, source_fractal = video_frame(video_source, sub_dir)
             end_video = timer()
             logger.debug(
                 f'Video {index} time elapsed: {end_video-start_video:.2f}s')
-            np.savetxt(f'{sub_dir.parents[0]}/{path.stem}-frame-histogram.csv', source_hist, delimiter=',', fmt='%d')
+            np.savetxt(
+                f'{sub_dir.parents[0]}/{path.stem}-frame-histogram.csv', source_hist[:, :, 0], delimiter=',', fmt='%d')
+            np.savetxt(
+                f'{sub_dir.parents[0]}/{path.stem}-fractal-dimension.csv', [source_fractal], delimiter=',', fmt='%f')
     else:
         source_hist = np.zeros((1, 256), dtype=np.int)
         for index, image_source in enumerate(files):
             logger.info(f'Image {index}: {image_source}')
             image = cv.imread(image_source, cv.IMREAD_GRAYSCALE)
-            source_hist = np.vstack([source_hist, cv.calcHist([image],[0],None,[256],[0,256]).T])
-        np.savetxt('global-frame-histogram.csv', source_hist[1:], delimiter=',', fmt='%d')
+            source_hist = np.vstack(
+                [source_hist, cv.calcHist([image], [0], None, [256], [0, 256]).T])
+        np.savetxt('global-frame-histogram.csv',
+                   source_hist[1:], delimiter=',', fmt='%d')
     logger.info(f'Finished frame analysis. Source: {source}')
     end_time = timer()
-    logger.debug(f'Frame analysis function time elapsed: {end_time-start_time:.2f}s')
+    logger.debug(
+        f'Frame analysis function time elapsed: {end_time-start_time:.2f}s')
+
 
 def mosaic(source, imagej='/opt/Fiji.app/ImageJ-linux64', extension=['*.mp4', '*.mpeg']):
     start_time = timer()
@@ -291,11 +300,13 @@ def video_frame(source, output_path):
     success, image = vidcap.read()
     count = 0
     frame_hist = []
+    fractal_list = []
     black = black_area(image)
     while success:
         gray_frame = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
         image = remove_text(gray_frame)
-        histogram = cv.calcHist([image],[0],None,[256],[0,256])
+        fractal_list.append(canny_fd(image))
+        histogram = cv.calcHist([image], [0], None, [256], [0, 256])
         histogram[0] = histogram[0] - black
         frame_hist.append(histogram)
         cv.imwrite(f'{str(output_path)}/frame{count:04d}.png', image)
@@ -304,20 +315,51 @@ def video_frame(source, output_path):
     logger.info(f'Finished video to frames. No. frames: {count}')
     end_time = timer()
     logger.debug(
-        f'Video to frames function elapsed time {end_time-start_time:.2f}')
-    return np.asarray(frame_hist, dtype=np.int)
+        f'Video to frames function elapsed time {end_time-start_time:.2f}s')
+    return np.asarray(frame_hist, dtype=np.int32), np.asarray(fractal_list, dtype=np.float32)
+
+def canny_fd(img, min_thr = 15, ratio = 3, fd_thres = 0.2):
+    max_thr = min_thr * ratio
+    img_canny = cv.Canny(img, min_thr, max_thr)
+    return fractal_dimension(img_canny/255, fd_thres)
+
+def fractal_dimension(Z, threshold):
+    assert(len(Z.shape) == 2)
+
+    def boxcount(Z, k):
+        S = np.add.reduceat(
+            np.add.reduceat(Z, np.arange(0, Z.shape[0], k), axis=0),
+            np.arange(0, Z.shape[1], k), axis=1)
+        return len(np.where((S > 0) & (S < k*k))[0])
+
+    Z = (Z < threshold)
+    p = min(Z.shape)
+    n = 2**np.floor(np.log(p)/np.log(2))
+    n = int(np.log(n)/np.log(2))
+
+    sizes = 2**np.arange(n, 1, -1)
+
+    counts = []
+    for size in sizes:
+        counts.append(boxcount(Z, size))
+
+    coeffs = np.polyfit(np.log(sizes), np.log(counts), 1)
+    return -coeffs[0]
+
 
 def black_area(image):
     gray_frame = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
     gray_frame = remove_text(gray_frame)
-    ret,thresh = cv.threshold(gray_frame, 6, 255, 0)
-    contours, hierarchy = cv.findContours(thresh, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
-    c = max(contours, key = cv.contourArea)
-    (x,y),radius = cv.minEnclosingCircle(c)
-    center = (int(x),int(y))
+    ret, thresh = cv.threshold(gray_frame, 6, 255, 0)
+    contours, hierarchy = cv.findContours(
+        thresh, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
+    c = max(contours, key=cv.contourArea)
+    (x, y), radius = cv.minEnclosingCircle(c)
+    center = (int(x), int(y))
     radius = int(radius)
-    cv.circle(gray_frame,center,radius,(255),-1)
+    cv.circle(gray_frame, center, radius, (255), -1)
     return np.sum(gray_frame == 0)
+
 
 def remove_text(image):
     # Remove white text from frame images
