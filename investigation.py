@@ -94,7 +94,6 @@ def rm_noise_frame(histogram, frame_threshold=75, light_max_freq=0.95, dark_max_
     clean_histogram = np.delete(histogram, rm_list, axis=0)
     logger.info(f'No. frames removed: {len(rm_list)}. List: {rm_list}')
     return clean_histogram, frame_freq_hist
-    logger.debug('\n\n >>>> 01 \n\n')
 
 
 def histogram_distance(ref_histogram, hist_freq_frames, video_interval, path):
@@ -253,7 +252,9 @@ def full_hist_analysis(source, clean=True):
     # size(len(files_path), 256) e substituir o hstack por estrutura[i] = novo
     # algo nessa linha. Pode reduzir tempo de execução
     healthy_ref_hist = np.empty((0, 256), np.int32)
+    # healthy_ref_hist = np.empty((0, 256), np.int32)
     healthy_ref_freq = np.empty((0, 256), np.float32)
+    # healthy_ref_freq = np.empty((0, 256), np.float32)
     healthy_fractal = []
     healthy_idx = [0]
     tumor_ref_hist = np.empty((0, 256), np.int32)
@@ -284,19 +285,8 @@ def full_hist_analysis(source, clean=True):
                 hellinger_HT = histogram_distance(
                     healthy_ref_hist, tumor_ref_freq, tumor_idx, plot_path)
 
-                for idx, hellinger_distr in enumerate(hellinger_HT):
-                    distance_distribution_plot(
-                        np.hstack(hellinger_HH), np.hstack(
-                            hellinger_distr), plot_path,
-                        f'{idx}-hellinger-distribution')
-
                 distance_distribution_plot(
                     np.hstack(hellinger_HH), np.hstack(hellinger_HT), plot_path)
-
-                for idx, fd_list in enumerate(tumor_fractal):
-                    fractal_distribution_plot(np.hstack(healthy_fractal),
-                                              np.asarray(fd_list), plot_path,
-                                              f'{idx}-fd-distribution')
 
                 fractal_distribution_plot(np.hstack(healthy_fractal),
                                           np.hstack(tumor_fractal), plot_path)
@@ -308,6 +298,18 @@ def full_hist_analysis(source, clean=True):
 
                 mean_tumor_hist = tumor_ref_hist.mean(axis=0)
                 histogram_plot(mean_tumor_hist, plot_path, 'Tumor')
+
+                for idx, hellinger_distr in enumerate(hellinger_HT):
+                    distance_distribution_plot(
+                        np.hstack(hellinger_HH), np.hstack(
+                            hellinger_distr), path_list[prev_idx+idx+len(healthy_idx)-1].parents[0],
+                        f'{path_list[prev_idx+idx+len(healthy_idx)-1].stem[:-16]}-hellinger-distribution')
+
+                for idx, fd_list in enumerate(tumor_fractal):
+                    fractal_distribution_plot(np.hstack(healthy_fractal),
+                                              np.asarray(
+                                                  fd_list), path_list[prev_idx+idx+len(healthy_idx)-1].parents[0],
+                                              f'{path_list[prev_idx+idx+len(healthy_idx)-1].stem[:-16]}-fractal-dimension')
 
                 flag = False
                 healthy_ref_hist = np.empty((0, 256), np.int32)
@@ -340,20 +342,28 @@ def full_hist_analysis(source, clean=True):
         healthy_ref_hist, healthy_ref_freq, healthy_idx, plot_path)
     hellinger_HT = histogram_distance(
         healthy_ref_hist, tumor_ref_freq, tumor_idx, plot_path)
+
     distance_distribution_plot(
         np.hstack(hellinger_HH), np.hstack(hellinger_HT), plot_path)
-    for idx, fd_list in enumerate(tumor_fractal):
-        fractal_distribution_plot(np.hstack(healthy_fractal),
-                                  np.asarray(fd_list), plot_path,
-                                  f'{idx}-fd-distribution')
-    fractal_distribution_plot(
-        np.hstack(healthy_fractal), np.hstack(tumor_fractal), plot_path)
-    histogram_multplot(
-        healthy_ref_hist, path_list[prev_idx:index], healthy_idx)
-    histogram_multplot(tumor_ref_hist, path_list[(
-        prev_idx+len(healthy_idx)-1):index+1], tumor_idx)
+
+    fractal_distribution_plot(np.hstack(healthy_fractal),
+                              np.hstack(tumor_fractal), plot_path)
+
+    histogram_multplot(healthy_ref_hist,
+                       path_list[prev_idx:(prev_idx+len(healthy_idx)-1)], healthy_idx)
+    histogram_multplot(tumor_ref_hist,
+                       path_list[(prev_idx+len(healthy_idx)-1):index+1], tumor_idx)
+
     mean_tumor_hist = tumor_ref_hist.mean(axis=0)
     histogram_plot(mean_tumor_hist, plot_path, 'Tumor')
+
+    for idx, hellinger_distr in enumerate(hellinger_HT):
+        distance_distribution_plot(np.hstack(hellinger_HH), np.hstack(hellinger_distr),
+                                   path_list[prev_idx+idx+len(healthy_idx)-1].parents[0], f'{path_list[prev_idx+idx+len(healthy_idx)-1].stem[:-16]}-hellinger-distribution')
+
+    for idx, fd_list in enumerate(tumor_fractal):
+        fractal_distribution_plot(np.hstack(healthy_fractal), np.asarray(fd_list),
+                                  path_list[prev_idx+idx+len(healthy_idx)-1].parents[0], f'{path_list[prev_idx+idx+len(healthy_idx)-1].stem[:-16]}-fractal-dimension')
 
     end_time = timer()
     logger.debug(f'Time elpased: {end_time-start_time:.2f}')
