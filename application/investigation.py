@@ -72,7 +72,7 @@ def find_files(source, pattern=['.csv']):
                             stderr=subprocess.STDOUT, universal_newlines=True)
     paths = output.stdout.splitlines()
     paths.sort()
-    logger.debug(f'Files found: {paths}')
+    logger.debug(f'No. of files: {len(paths)}. Files found: {paths}')
     return paths
 
 
@@ -96,6 +96,13 @@ def rm_noise_frame(histogram, frame_threshold=75, light_max_freq=0.95, dark_max_
     return clean_histogram, frame_freq_hist
 
 
+def count_to_intensities(histogram):
+    intensities = []
+    for intensity in range(256):
+        intensities.extend(np.repeat(intensity, int(histogram[intensity])))
+    return intensities
+    
+    
 def histogram_distance(ref_histogram, hist_freq_frames, video_interval, path):
     mean_hist = ref_histogram.mean(axis=0)
     histogram_plot(mean_hist, path, 'Healthy')
@@ -151,10 +158,11 @@ def distance_distribution_plot(first_distribution, second_distribution, path, na
 
 
 def histogram_plot(histogram, path, name):
-    barplot = []
-    for intensity in range(256):
-        barplot.extend(
-            np.repeat(intensity, int(histogram[intensity])))
+    # barplot = []
+    # for intensity in range(256):
+    #     barplot.extend(
+    #         np.repeat(intensity, int(histogram[intensity])))
+    barplot = count_to_intensities(histogram)
     plot_style()
     _, ax = plt.subplots(1)
     density = ax.hist(barplot, density=True, bins=256, alpha=.85)[0]
@@ -187,6 +195,40 @@ def histogram_multplot(histogram, path_list, histogram_index):
     mean_histograms = build_ref_mean(histogram, histogram_index)
     for idx, hist in enumerate(mean_histograms):
         histogram_plot(hist, path_list[idx].parents[0], path_list[idx].stem)
+
+def intensity_qq_plot(healthy_quantils, tumor_quantils, path, name):
+    _, ax = plt.subplots(figsize=(7,7))
+    plt.plot([8, 256], [8, 256], '--', color = 'r')
+    plt.scatter(healthy_quantils, tumor_quantils)
+    ticks = [10,25,50,100,200]
+    ax.set(title='Intensity Q-Q plot', ylabel="Tumor", xlabel='Healthy',xscale="log",yscale="log", xticks=ticks, yticks=ticks)
+    plt.xlim(7, 275)
+    plt.ylim(7, 275)
+    plt.savefig(f'{path}/{name}-intensity-qq-plot.png', dpi=600, bbox_inches='tight')
+
+def intensity_qq_multplot(healthy_hist, tumor_hist, path_list, tumor_index, num_quant=25):
+    logger.debug(f'H: {healthy_hist.shape}')
+    # normal global
+    healthy_ref = build_ref_mean(healthy_hist, [0, len(healthy_hist)-1])
+    logger.debug(f'Href: {healthy_ref.shape}')
+    # calcula quantiles do normal
+    # healthy = []
+    # for intensity in range(256):
+    #     healthy.extend(np.repeat(intensity, int(healthy_ref[0][intensity])))
+    healthy = count_to_intensities(healthy_ref[0])
+    healthy_quantils = np.quantile(healthy, np.linspace(0,1,num_quant+1)[1:])
+    tumor_ref_hists = build_ref_mean(tumor_hist, tumor_index)
+    # Para cada tumoral:
+    logger.debug(f'Tref: {tumor_ref_hists.shape}; PL: {path_list}')
+    for idx, hist in enumerate(tumor_ref_hists):
+        # tumor = []
+        # for intensity in range(256):
+        #     tumor.extend(np.repeat(intensity, int(hist[intensity])))
+        tumor = count_to_intensities(hist)
+    # calcula quantile do tumoral
+        tumor_quantils = np.quantile(tumor, np.linspace(0,1,num_quant+1)[1:])
+    # faz grafico normal-tumoral
+        intensity_qq_plot(healthy_quantils, tumor_quantils, path_list[idx].parents[0], path_list[idx].stem)
 
 
 def fractal_distribution_plot(first_distribution, second_distribution, path, name='HT-fractal-distibution'):
@@ -248,13 +290,8 @@ def full_hist_analysis(source, clean=True):
     files_frac = find_files(source, ['-fractal-dimension.csv'])
     flag = False
     prev_idx = None
-    # Trocar o hstack por assinatura direta. Criar array vazio com tamanho
-    # size(len(files_path), 256) e substituir o hstack por estrutura[i] = novo
-    # algo nessa linha. Pode reduzir tempo de execução
     healthy_ref_hist = np.empty((0, 256), np.int32)
-    # healthy_ref_hist = np.empty((0, 256), np.int32)
     healthy_ref_freq = np.empty((0, 256), np.float32)
-    # healthy_ref_freq = np.empty((0, 256), np.float32)
     healthy_fractal = []
     healthy_idx = [0]
     tumor_ref_hist = np.empty((0, 256), np.int32)
@@ -296,8 +333,23 @@ def full_hist_analysis(source, clean=True):
                 histogram_multplot(tumor_ref_hist,
                                    path_list[(prev_idx+len(healthy_idx)-1):index], tumor_idx)
 
+                logger.debug(f'PLX: {path_list}')
+                intensity_qq_multplot(healthy_ref_hist, tumor_ref_hist, path_list[(prev_idx+len(healthy_idx)-1):index], tumor_idx) 
+
                 mean_tumor_hist = tumor_ref_hist.mean(axis=0)
                 histogram_plot(mean_tumor_hist, plot_path, 'Tumor')
+
+                num_quant = 25
+                tumor_intensities = count_to_intensities(mean_tumor_hist)
+                tumor_quantils = np.quantile(tumor_intensities, np.linspace(0,1,num_quant+1)[1:])
+                
+                mean_healthy_hist = healthy_ref_hist.mean(axis=0)
+                healthy_intensities = count_to_intensities(mean_healthy_hist)
+                healthy_quantils = np.quantile(healthy_intensities, np.linspace(0,1,num_quant+1)[1:])
+
+                intensity_qq_plot(healthy_quantils, tumor_quantils, plot_path, name='HT')
+                
+                # intensity_qq_multplot(healthy_ref_hist, tumor_ref_hist, path_list[(prev_idx+len(healthy_idx)-1):index], tumor_idx) 
 
                 for idx, hellinger_distr in enumerate(hellinger_HT):
                     distance_distribution_plot(
@@ -323,7 +375,6 @@ def full_hist_analysis(source, clean=True):
             healthy_ref_hist = np.vstack([healthy_ref_hist, hist])
             healthy_ref_freq = np.vstack([healthy_ref_freq, hist_freq])
             healthy_idx.append(healthy_idx[-1]+len(hist))
-            # healthy_fractal.extend(frac)
             healthy_fractal.append(frac)
             prev_idx = index
         elif '/1/' in fpath:
@@ -331,10 +382,9 @@ def full_hist_analysis(source, clean=True):
             tumor_ref_hist = np.vstack([tumor_ref_hist, hist])
             tumor_ref_freq = np.vstack([tumor_ref_freq, hist_freq])
             tumor_idx.append(tumor_idx[-1]+len(hist))
-            # tumor_fractal.extend(frac)
             tumor_fractal.append(frac)
         else:
-            logger.error('Wrong structure! Exiting...')
+            logger.error('Incorrect structure! Exiting...')
             sys.exit()
 
     plot_path = path_list[prev_idx].parents[2]
@@ -354,8 +404,21 @@ def full_hist_analysis(source, clean=True):
     histogram_multplot(tumor_ref_hist,
                        path_list[(prev_idx+len(healthy_idx)-1):index+1], tumor_idx)
 
+    logger.debug(f'PLY: {path_list}')
+    intensity_qq_multplot(healthy_ref_hist, tumor_ref_hist, path_list[(prev_idx+len(healthy_idx)-1):index+1], tumor_idx)
+    
     mean_tumor_hist = tumor_ref_hist.mean(axis=0)
     histogram_plot(mean_tumor_hist, plot_path, 'Tumor')
+
+    num_quant = 25
+    tumor_intensities = count_to_intensities(mean_tumor_hist)
+    tumor_quantils = np.quantile(tumor_intensities, np.linspace(0,1,num_quant+1)[1:])
+                
+    mean_healthy_hist = healthy_ref_hist.mean(axis=0)
+    healthy_intensities = count_to_intensities(mean_healthy_hist)
+    healthy_quantils = np.quantile(healthy_intensities, np.linspace(0,1,num_quant+1)[1:])
+
+    intensity_qq_plot(healthy_quantils, tumor_quantils, plot_path, name='HT')
 
     for idx, hellinger_distr in enumerate(hellinger_HT):
         distance_distribution_plot(np.hstack(hellinger_HH), np.hstack(hellinger_distr),
