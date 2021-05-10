@@ -1,4 +1,4 @@
-#   Copyright (C) 2020 AMPhyBio
+#   Copyright (C) 2020-2021 AMPhyBio Lab
 #
 #   This program is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -12,6 +12,8 @@
 #
 #   You should have received a copy of the GNU General Public License
 #   along with program.  If not, see <http://www.gnu.org/licenses/>.
+#
+#   Contact AMPhyBio Lab head: Alexandre F. Ramos <alex.ramos@usp.br>
 
 # =============================================================================
 #          FILE:  extract.py
@@ -114,22 +116,14 @@ def zip_move(path, dest_path):
     return key_sand
 
 
-def frame_analysis(source, extension=['*.mp4', '*.mpeg'], ftype=0):
+def comparative_analysis(source, extension=['.mp4', '.mpeg'], ftype=0):
     # ftype: (0) Video; (other) Image
     start_time = timer()
     logger.info('Initializing frame analysis')
     logger.debug(
         f'Parameters - source: {source} | ext: {extension} | ftype: {int(ftype)}')
-    cmd = f'find {source} -type f -name "{extension[0]}"'
-    for ext in extension[1:]:
-        cmd += f' -o -name "{ext}"'
-    logger.debug(f'Command: {cmd}')
-    output = subprocess.run(cmd, shell=True,  stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT, universal_newlines=True)
-    files = output.stdout.splitlines()
-    files.sort()
+    files = find_files(source, extension)
     logger.info(f'No. of {extension} files found: {len(files)}')
-    logger.debug(f'Source: {source} | Files: {files}')
     if int(ftype) == 0:
         import pathlib
         for index, video_source in enumerate(files):
@@ -885,6 +879,22 @@ def draw_countours(image, crypts_list):
         cv.drawContours(image, crypt, -1, (115, 158, 0), 12)
 
 
+def find_files(source, pattern=['.mp4']):
+    cmd = f'find {source} -type f -name "*{pattern[0]}"'
+    print(f'pattern: {len(pattern)}')
+    for patt in pattern[1:]:
+        cmd += f' -o -name "*{patt}"'
+    logger.debug(f'Find command: {cmd}')
+
+    import subprocess
+    output = subprocess.run(cmd, shell=True,  stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, universal_newlines=True)
+    paths = output.stdout.splitlines()
+    paths.sort()
+    logger.debug(f'Source: {source} | Files: {paths}')
+    return paths
+
+
 def main():
     import argparse
     ap = argparse.ArgumentParser()
@@ -898,6 +908,7 @@ def main():
                     help="Define range of frames in Stack function")
     ap.add_argument("-s", "--settings", nargs='+', type=str, required=False,
                     help="Define parameters settings of frames analysis function")
+
     args = vars(ap.parse_args())
     function = args["function"]
     source = args["path"]
@@ -919,11 +930,11 @@ def main():
             substack_frames(source, name, interval)
         elif (function == "cryptometry"):
             cryptometry(source)
-        elif (function == "frame-hist"):
+        elif (function == "comparative"):
             if settings is None:
-                frame_analysis(source)
+                comparative_analysis(source)
             else:
-                frame_analysis(source, settings[0], settings[1])
+                comparative_analysis(source, settings)
         else:
             logger.error("Undefined function")
     else:
