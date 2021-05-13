@@ -2,9 +2,12 @@
 
 <!-- Add banner here -->
 # Motiro
-<!-- Add buttons here --> <!-- ![GitHub release (latest by date including
-pre-releases)](https://img.shields.io/github/v/release/navendu-pottekkat/awesome-readme?include_prereleases)
---> ![GitHub last
+
+<!-- Add buttons here -->
+
+<!-- ![GitHub release (latest by date including
+pre-releases)](https://img.shields.io/github/v/release/navendu-pottekkat/awesome-readme?include_prereleases)-->
+![GitHub last
 commit](https://img.shields.io/github/last-commit/amphybio/endomicroscopy-analysis)
 ![GitHub
 issues](https://img.shields.io/github/issues-raw/amphybio/endomicroscopy-analysis)
@@ -12,11 +15,13 @@ issues](https://img.shields.io/github/issues-raw/amphybio/endomicroscopy-analysi
 requests](https://img.shields.io/github/issues-pr/amphybio/endomicroscopy-analysis)
 ![GitHub](https://img.shields.io/github/license/amphybio/endomicroscopy-analysis)
 
-<!-- Describe your project in brief --> Motiro - from tupi-guarani, the language
-of native Brazilians, meaning a reunion for building - is an unified
-non-supervised Python-based framework for pre-processing, segmentation,
-quantitative and statistical analysis of the architecture of the colorectal
-mucosa imaged by pCLE and, hence, a useful tool for feeding an integrated
+<!-- Describe your project in brief -->
+
+Motiro - from tupi-guarani, the language of native Brazilians, meaning a reunion
+for building - is an unified non-supervised Python-based framework for
+pre-processing, segmentation, quantitative and statistical analysis of the
+architecture of the colorectal mucosa imaged by probe-based Confocal Laser
+Endomicroscopy (pCLE) and, hence, a useful tool for feeding an integrated
 database.
 
 <!-- The project title should be self explanotory and try not to make it a
@@ -102,16 +107,21 @@ looking for.
 Here is a sample TOC(*wow! such cool!*) that is actually the TOC for this
 README. -->
 
-<!-- - [Project Title](#project-title) --> <!-- - [Demo-Preview](#demo-preview)
---> <!-- - [Table of contents](#table-of-contents) -->
+<!-- - [Project Title](#project-title) -->
+
+<!-- - [Demo-Preview](#demo-preview)-->
+
+<!-- - [Table of contents](#table-of-contents) -->
 - [Dependencies](#dependencies)
 - [Installation](#installation)
 - [Usage](#usage)
+   - [Comparative analysis](#comparative-analysis-of-healthy-and-tumor-mucosa)
+   - [Statistical characterization](#statistical-characterization-of-the-architecture-of-the-healthy-colorectal-mucosa)
 <!-- - [Development](#development) -->
-- [Contribute](#contribute)
-    <!-- - [Sponsor](#sponsor) -->
-    - [Adding new features or fixing bugs](#adding-new-features-or-fixing-bugs)
-<!-- - [License](#license) -->
+<!-- - [Contribute](#contribute) -->
+<!--     <\!-- - [Sponsor](#sponsor) -\-> -->
+<!--     - [Adding new features or fixing bugs](#adding-new-features-or-fixing-bugs) -->
+- [License](#license)
 <!-- - [Footer](#footer) -->
 
 # Dependencies
@@ -148,15 +158,6 @@ Following this steps, **they should be able to run this in their device.**
 A method I use is after completing the README, I go through the instructions
 from scratch and check if it is working. -->
 
-<!-- Here is a sample instruction:
-
-To use this project, first clone the repo on your device using the command
-below:
-
-`-``git init```
-
-`-``git clone https://github.com/navendu-pottekkat/nsfw-filter.git``` -->
-
 # Usage
 [(Back to top)](#table-of-contents)
 
@@ -169,13 +170,13 @@ The folder application has the following structure:
     │   ├── comparative-sample
     │   │   ├── main
     │   │   │   ├── Sample01        # First patient sample
-    │   │   │   .   ├── 0           # Videos that will be used as reference ())
-    │   │   │   .   └── 1           # Videos to be compared ()
+    │   │   │   .   ├── 0           # pCLE videos that will be used as reference
+    │   │   │   .   └── 1           # pCLE videos to be compared
     │   │   │   .
     │   │   │   └── SampleNN        # i-th patient sample
     │   │   │       ├── 0
     │   │   │       └── 1
-    │   │   └── sandbox             # Stores backup directories to avoid overwriting
+    │   │   └── sandbox             # Store backup directories to avoid overwriting
     │   └── characterization-sample
     │       ├── main
     │       │   ├── Sample01
@@ -185,20 +186,14 @@ The folder application has the following structure:
     │       │   └── SampleNN
     │       └── sandbox
     ├── requirements.txt            # Lists all of a program's dependencies
-    ├── LICENSE
+    ├── LICENSE                     # Code license
     └── README.md
 
 
-Inside of each directory of the classes of analysis there are the directories
-'*main*' and '*sandbox*'. The *main* directory is where the files that will be
-analysed shall be placed while the *sandbox* will save directories that can be
-overwriten during the program are running.
+*application* directory contains the Python modules. The module *extract.py*
+performs the image analysis in the input files. To see the quick options of
+this module run:
 
-For the **comparative analysis**, each subdirectory in *main* represent a
-patient sample, and the reference healthy videos of a patient must be placed in
-the subdirectory *0* while the videos to be compared must be placed in *1*.
-
-To see the quick options of program modules run:
 ```console
 user@term:~$ python extract.py -h
 ```
@@ -213,23 +208,65 @@ The command will show the information summarized in the table below:
 | -s, --settings | Settings the input file format    |
 
 The arguments *-f* and *-p* are mandatory to perform the analysis. The functions
-available are **INCLUIR FUNÇÕES AQUI** and in the next sections further
-descriptions will be given.
+available are:
+
+|   Function  |                              Description                              |
+|:-----------:|:---------------------------------------------------------------------:|
+| comparative | Generate the image frames, pixel intensity and fractal dimension data |
+|             |                                                                       |
+
+The module *investigation.py* performs the statistical analysis of the results
+generated with the previous module. To see the quick options of this module run:
+
+```console
+user@term:~$ python investigation.py -h
+```
+The command will show the information summarized in the table below:
+
+|    Arguments   |            Description            |
+|:--------------:|:---------------------------------:|
+| -h, --help     | Show help message and exit        |
+| -f, --function | Set a function to call            |
+| -p, --path     | Set input file or directory path  |
+| -v, --verbose  | Increase log output verbosity     |
+
+The arguments *-f* and *-p* are mandatory to perform the analysis. The functions
+available are:
+
+|       Function       |                                                                 Description                                                                |
+|:--------------------:|:------------------------------------------------------------------------------------------------------------------------------------------:|
+| comparative-analysis | Generate the pixel intensity, fractal dimension and Hellinger distance histograms  and the pixel intensity and fractal dimension Q-Q plots |
+|                      |                                                                                                                                            |
+
+The *rvss.py* and *logendo.\** files are used to set the configurations to
+stitch images in mosaic and logging, respectively.
+
+In *data-sample* there are some input samples for *compartive analysis* and
+*statistical characterization*. Inside of each directory of the classes of
+analysis there are the directories '*main*' and '*sandbox*'. The *main*
+directory is where the files that will be analysed shall be placed while the
+*sandbox* will save directories that can be overwritten during the program are
+running.
+
+For the **comparative analysis**, each subdirectory in *main* represent a
+patient sample, and the reference healthy videos of a patient must be placed in
+the subdirectory *0* while the videos to be compared must be placed in *1*.
+
 
 ## Comparative analysis of healthy and tumor mucosa
 
-### 1. Generate frames, pixel intensity and fractal dimension data
+### 1. Frames, pixel intensity and fractal dimension data
 
 First step to perform the comparative analysis is generate the frame images from
-pCLE videos to produce the pixel intensity and fractal dimension
-data. The command below is an example to carry out this steps:
+pCLE videos to produce the pixel intensity and fractal dimension data. The
+command below is an example to carry out this steps:
 
 ```console
 user@term:~$ python extract.py -f comparative -p ../data-sample/comparative-sample/main/
 ```
 
-Videos with *MP4* and *MPEG* extensions will be listed by default, if diferent
-format is needed the optinal argument *-s* can be used to specify the format as follow:
+Videos with *MP4* and *MPEG* extensions will be listed by default, if different
+format is needed the optional argument *-s* can be used to specify the format as follow:
 
 ```console
 user@term:~$ python extract.py -f comparative -p ../data-sample/comparative-sample/main/ -s .avi .mkv
@@ -239,89 +276,34 @@ In this example, just videos with *AVI* and *MKV* extensions will be listed. A
 list of extensions can be set to search files, is necessary only separate each
 extension with a simple space after *-s* argument.
 
+The output of this execution will generate the *frame* folder whereby for each
+video input, a folder with frame images named with the video name will be
+created. Furthermore, CSV files with the fractal dimension values and other with
+pixel intensity of each frame will be produced for each video.
+
+The plots outside the frame folder use all frames from all videos of the patient
+to generate a global statistics of the patient.
+
 ### 2. Generate statistics
 
-
-## Statistical characterization of the crypts morphometry
-
-
-## Morphometry module
+After perform the data generation in the previous step, to produce the
+statistical analysis and the plots, run the following command:
 
 ```console
-user@term:~$ python extract.py -f mosaic -p main/video001.mp4
+user@term:~$ python investigation.py -f comparative-analysis -p ../data-sample/comparative-sample/main/
 ```
-```console
-user@term:~$ python extract.py -f cryptometry -p main/video001.tif
-```
-```console
-user@term:~$ python extract.py -f mosaic -p main/0000/
-```
-<!-- ## Statistics module -->
 
+This command will use the videos in the reference folder (folder named as *0/*)
+for each patient to generate the comparison with the videos in folder *1/*. For
+each video will be produce a pixel intensity histogram plot and the Q-Q plot of
+pixel intensity as well the distribution histogram and the Q-Q plot of the
+fractal dimension will be produced. The Hellinger distance will be calculated
+and a histogram plot of the distribution of distances will be generated. For
+each video, the related graph starts with the video name followed by the plot
+type. (i.e, S01V01-fractal-qq-plot.png)
 
-<!-- This is optional and it is used to give the user info on how to use the
-project after installation. This could be added in the Installation section
-also. -->
+## Statistical characterization of the architecture of the healthy colorectal mucosa
 
-<!-- # Development -->
-<!-- [(Back to top)](#table-of-contents) -->
-
-<!-- This is the place where you give instructions to developers on how to
-modify the code.
-
-You could give **instructions in depth** of **how the code works** and how
-everything is put together.
-
-You could also give specific instructions to how they can setup their
-development environment.
-
-Ideally, you should keep the README simple. If you need to add more complex
-explanations, use a wiki. Check out [this
-wiki](https://github.com/navendu-pottekkat/nsfw-filter/wiki) for inspiration.
--->
-
-# Contribute
-[(Back to top)](#table-of-contents)
-
-<!-- This is where you can let people know how they can **contribute** to your
-project. Some of the ways are given below.
-
-Also this shows how you can add subsections within a section. -->
-
-<!-- ### Sponsor -->
-<!-- [(Back to top)](#table-of-contents) -->
-
-<!-- Your project is gaining traction and it is being used by thousands of
-people(***with this README there will be even more***). Now it would be a good
-time to look for people or organisations to sponsor your project. This could be
-because you are not generating any revenue from your project and you require
-money for keeping the project alive.
-
-You could add how people can sponsor your project in this section. Add your
-patreon or GitHub sponsor link here for easy access.
-
-A good idea is to also display the sponsors with their organisation logos or
-badges to show them your love!(*Someday I will get a sponsor and I can show my
-love*) -->
-
-### Adding new features or fixing bugs
-[(Back to top)](#table-of-contents)
-
-<!-- This is to give people an idea how they can raise issues or feature
-requests in your projects.
-
-You could also give guidelines for submitting and issue or a pull request to
-your project.
-
-Personally and by standard, you should use a [issue
-template](https://github.com/navendu-pottekkat/nsfw-filter/blob/master/ISSUE_TEMPLATE.md)
-and a [pull request
-template](https://github.com/navendu-pottekkat/nsfw-filter/blob/master/PULL_REQ_TEMPLATE.md)(click
-for examples) so that when a user opens a new issue they could easily format it
-as per your project guidelines.
-
-You could also add contact details for people to get in touch with you regarding
-your project. -->
 
 # License
 [(Back to top)](#table-of-contents)

@@ -161,21 +161,20 @@ def distance_distribution_plot(first_distribution, second_distribution, path, na
 
 def histogram_plot(histogram, path, name):
    barplot = count_to_intensities(histogram)
-    plot_style()
-    _, ax = plt.subplots(1)
-    density = ax.hist(barplot, density=True, bins=256, alpha=.85)[0]
-    ax.set(title=f'Intensity histogram', ylabel="Relative frequency", xlabel='Pixel intensity', xticks=np.arange(0, 255, 50),
-           yticks=ticks_interval(density, 6, 3))
-    plot = ax.get_figure()
-    plot.canvas.draw()
-    for index, label in enumerate(ax.get_yticklabels()):
-        if index % 2 == 1:
-            label.set_visible(True)
-        else:
-            label.set_visible(False)
-    plt.savefig(f'{path}/{name}.png',
-                dpi=600, bbox_inches="tight")
-    plt.clf()
+   plot_style()
+   _, ax = plt.subplots(1)
+   density = ax.hist(barplot, density=True, bins=256, alpha=.85)[0]
+   ax.set(title=f'Intensity histogram', ylabel="Relative frequency", xlabel='Pixel intensity', xticks=np.arange(0, 255, 50),
+          yticks=ticks_interval(density, 6, 3))
+   plot = ax.get_figure()
+   plot.canvas.draw()
+   for index, label in enumerate(ax.get_yticklabels()):
+       if index % 2 == 1:
+           label.set_visible(True)
+       else:
+           label.set_visible(False)
+   plt.savefig(f'{path}/{name}.png', dpi=600, bbox_inches="tight")
+   plt.clf()
 
 
 def build_ref_mean(histogram, video_intervals):
