@@ -281,9 +281,6 @@ video input, a folder with frame images named with the video name will be
 created. Furthermore, CSV files with the fractal dimension values and other with
 pixel intensity of each frame will be produced for each video.
 
-The plots outside the frame folder use all frames from all videos of the patient
-to generate a global statistics of the patient.
-
 ### 2. Generate statistics
 
 After perform the data generation in the previous step, to produce the
@@ -302,8 +299,22 @@ and a histogram plot of the distribution of distances will be generated. For
 each video, the related graph starts with the video name followed by the plot
 type. (i.e, S01V01-fractal-qq-plot.png)
 
+The plots outside the frame folder use all frames from all videos of the patient
+to generate a global statistics of the patient.
+
 ## Statistical characterization of the architecture of the healthy colorectal mucosa
 
+### 1. Build the mosaic
+
+The mosaic image can
+
+```console
+user@term:~$ python extract.py -f mosaic -p ../data-sample/characterization-sample/main/
+```
+
+### 2. Perform crypt morphometry
+
+### 3. Generate statistics
 
 # License
 [(Back to top)](#table-of-contents)
